@@ -1,3 +1,4 @@
+mod auth;
 mod mysql_client;
 
 use serde::Deserialize;
