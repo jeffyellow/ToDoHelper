@@ -17,12 +17,17 @@ vi.mock('../../db/syncQueries.js', () => ({
   upsertTaskByUuid: vi.fn(),
 }))
 
+vi.mock('../../db/settingQueries.js', () => ({
+  hasMysqlConfig: vi.fn(),
+}))
+
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
 }))
 
 import { selectAllTasks, insertTask, updateTask, deleteTask } from '../../db/taskQueries.js'
 import { getPendingTasks, getLastSyncAt } from '../../db/syncQueries.js'
+import { hasMysqlConfig } from '../../db/settingQueries.js'
 import { invoke } from '@tauri-apps/api/core'
 
 describe('taskStore', () => {
@@ -31,6 +36,7 @@ describe('taskStore', () => {
     vi.clearAllMocks()
     getPendingTasks.mockResolvedValue([])
     getLastSyncAt.mockResolvedValue(null)
+    hasMysqlConfig.mockResolvedValue(false)
     invoke.mockResolvedValue({ pulled_tasks: [], new_last_sync_at: '2026-01-01 00:00:00' })
   })
 

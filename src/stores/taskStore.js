@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { selectAllTasks, insertTask, updateTask, deleteTask } from '../db/taskQueries.js'
 import { getPendingTasks, markTasksSynced, getLastSyncAt, setLastSyncAt, upsertTaskByUuid } from '../db/syncQueries.js'
+import { hasMysqlConfig } from '../db/settingQueries.js'
 
 export const useTaskStore = defineStore('task', () => {
   const tasks = ref([])
@@ -60,6 +61,8 @@ export const useTaskStore = defineStore('task', () => {
 
   async function triggerSync() {
     if (syncStatus.value === 'syncing') return
+    const hasConfig = await hasMysqlConfig()
+    if (!hasConfig) return
     syncStatus.value = 'syncing'
     try {
       const pending = await getPendingTasks()

@@ -54,6 +54,46 @@ pub struct AppState {
     pub jwt_secret: String,
 }
 
+async fn ensure_mysql_schema(pool: &sqlx::MySqlPool) -> Result<(), String> {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS users (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(32) UNIQUE NOT NULL,
+            password_hash VARCHAR(255) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        "#,
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            local_uuid VARCHAR(36) NOT NULL,
+            title VARCHAR(255) NOT NULL,
+            completed TINYINT NOT NULL DEFAULT 0,
+            start_date VARCHAR(10),
+            due_date VARCHAR(10),
+            priority INT NOT NULL DEFAULT 1,
+            tag VARCHAR(50),
+            created_at VARCHAR(24),
+            completed_at VARCHAR(24),
+            updated_at VARCHAR(24) NOT NULL,
+            UNIQUE KEY uk_user_uuid (user_id, local_uuid)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[command]
 async fn test_mysql_connection(config: MysqlConfig) -> Result<(), String> {
     let pool = mysql_client::create_pool(&config).await?;
@@ -67,6 +107,7 @@ async fn register_user(
     state: State<'_, Arc<AppState>>,
 ) -> Result<AuthResult, String> {
     let pool = mysql_client::create_pool(&payload.config).await?;
+    ensure_mysql_schema(&pool).await?;
     let user_id = auth::register_user(&pool, &payload.app_username, &payload.app_password).await?;
     let token = auth::generate_token(user_id, &payload.app_username, state.jwt_secret.as_bytes())?;
 
@@ -91,6 +132,7 @@ async fn login_user(
     state: State<'_, Arc<AppState>>,
 ) -> Result<AuthResult, String> {
     let pool = mysql_client::create_pool(&payload.config).await?;
+    ensure_mysql_schema(&pool).await?;
     let (user_id, token) = auth::login_user(
         &pool,
         &payload.app_username,
@@ -124,6 +166,9 @@ async fn sync_tasks(
     let pool = pool_guard.as_ref().ok_or("MySQL 未连接")?;
     let user_guard = state.current_user.lock().await;
     let user = user_guard.as_ref().ok_or("未登录")?;
+
+    auth::verify_token(&user.token, state.jwt_secret.as_bytes())
+        .map_err(|_| "登录已过期，请重新连接")?;
 
     sync::push_tasks(pool, user.user_id, &pending_tasks).await?;
     let pulled_tasks = sync::pull_tasks(pool, user.user_id, last_sync_at.as_deref()).await?;
