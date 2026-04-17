@@ -1,5 +1,6 @@
 mod auth;
 mod mysql_client;
+mod sync;
 
 use serde::Deserialize;
 use tauri::{command, generate_context, generate_handler, Builder, WebviewWindow};
