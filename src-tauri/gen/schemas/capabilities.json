@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Default capabilities","local":true,"windows":["main"],"permissions":["core:default","sql:default","sql:allow-load","sql:allow-execute","sql:allow-select","core:window:allow-set-always-on-top"]}}

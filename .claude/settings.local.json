@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmd:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(npm run:*)",
+      "Bash(cargo build:*)",
+      "Bash(powershell:*)",
+      "Bash(git worktree:*)",
+      "Bash(npm install:*)",
+      "Bash(git commit:*)",
+      "Bash(npx tauri:*)",
+      "Bash(netstat -ano)",
+      "Bash(findstr :1420)",
+      "Bash(tasklist:*)",
+      "Bash(taskkill:*)",
+      "Bash(mkdir -p \"/c/Users/huangjf19614/AppData/Local/tauri/NSIS\")",
+      "Bash(cp -r /c/Users/huangjf19614/.cache/tauri/nsis-3.11/* \"/c/Users/huangjf19614/AppData/Local/tauri/NSIS/\")",
+      "Bash(mkdir -p \"/c/Users/huangjf19614/AppData/Local/tauri/Wix314\")",
+      "Bash(cp -r /c/Users/huangjf19614/.cache/tauri/WiX314/* \"/c/Users/huangjf19614/AppData/Local/tauri/Wix314/\")"
+    ]
+  }
+}
