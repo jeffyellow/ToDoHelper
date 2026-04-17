@@ -7,7 +7,7 @@ import TaskList from '../components/TaskList.vue'
 import TaskEditor from '../components/TaskEditor.vue'
 
 const taskStore = useTaskStore()
-const emit = defineEmits(['enterFloat'])
+const emit = defineEmits(['enterFloat', 'openDbConfig'])
 const editorOpen = ref(false)
 const editingTask = ref(null)
 
@@ -28,12 +28,13 @@ function closeEditor() {
 
 <template>
   <div class="main-view">
-    <Sidebar />
+    <Sidebar @open-db-config="emit('openDbConfig')" />
     <div class="content">
       <TopBar
         :search-query="taskStore.searchQuery"
         @update:search-query="taskStore.setSearchQuery"
         @enter-float="emit('enterFloat')"
+        @open-db-config="emit('openDbConfig')"
       />
       <div class="page-body">
         <TaskList @edit-task="openEditor" />

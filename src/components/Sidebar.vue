@@ -1,7 +1,9 @@
 <script setup>
 import { useTaskStore } from '../stores/taskStore.js'
+import { Database } from 'lucide-vue-next'
 
 const taskStore = useTaskStore()
+const emit = defineEmits(['openDbConfig'])
 const filters = [
   { label: '进行中', key: 'active' },
   { label: '未开始', key: 'pending' },
@@ -23,6 +25,11 @@ const filters = [
         {{ f.label }}
       </button>
     </nav>
+    <div class="spacer" />
+    <button class="nav-item db-item" @click="emit('openDbConfig')">
+      <Database :size="16" />
+      <span>数据库连接</span>
+    </button>
   </aside>
 </template>
 
@@ -55,6 +62,9 @@ const filters = [
   text-align: left;
   cursor: pointer;
   font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .nav-item:hover {
   background: var(--surface-hover);
@@ -62,5 +72,11 @@ const filters = [
 .nav-item.active {
   background: var(--color-primary-subtle);
   color: var(--color-primary-hover);
+}
+.spacer {
+  flex: 1;
+}
+.db-item {
+  margin-top: 8px;
 }
 </style>

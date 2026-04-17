@@ -1,20 +1,27 @@
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import MainView from './views/MainView.vue'
 import FloatView from './views/FloatView.vue'
+import DatabaseConfigModal from './components/DatabaseConfigModal.vue'
 import { useSettingStore } from './stores/settingStore.js'
 import { useTaskStore } from './stores/taskStore.js'
 import { initDb } from './db/init.js'
+import { hasMysqlConfig } from './db/settingQueries.js'
 
 const settingStore = useSettingStore()
 const taskStore = useTaskStore()
+const showDbConfig = ref(false)
 
 onMounted(async () => {
   try {
     await initDb()
     await settingStore.init()
     await taskStore.loadTasks()
+    const hasConfig = await hasMysqlConfig()
+    if (!hasConfig) {
+      showDbConfig.value = true
+    }
   } catch (e) {
     console.error('App initialization failed:', e)
     alert('初始化失败：' + e.message)
@@ -40,16 +47,26 @@ async function exitFloat() {
     alert('返回主界面失败：' + e.message)
   }
 }
+
+function onDbConnected() {
+  taskStore.triggerSync().catch(console.error)
+}
 </script>
 
 <template>
   <MainView
     v-if="!settingStore.isFloat"
     @enter-float="enterFloat"
+    @open-db-config="showDbConfig = true"
   />
   <FloatView
     v-else
     @exit-float="exitFloat"
+  />
+  <DatabaseConfigModal
+    :open="showDbConfig"
+    @close="showDbConfig = false"
+    @connected="onDbConnected"
   />
 </template>
 
