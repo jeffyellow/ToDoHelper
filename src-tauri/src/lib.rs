@@ -91,6 +91,15 @@ async fn ensure_mysql_schema(pool: &sqlx::MySqlPool) -> Result<(), String> {
     .execute(pool)
     .await
     .map_err(|e| e.to_string())?;
+
+    // 忽略已存在索引的错误，保证幂等
+    let _ = sqlx::query("CREATE INDEX idx_tasks_user_id ON tasks(user_id)")
+        .execute(pool)
+        .await;
+    let _ = sqlx::query("CREATE INDEX idx_tasks_updated_at ON tasks(updated_at)")
+        .execute(pool)
+        .await;
+
     Ok(())
 }
 
