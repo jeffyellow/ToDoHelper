@@ -1,58 +1,59 @@
-# MySQL Sync + Database Config Modal Implementation Plan
+# ToDoHelper 远程 MySQL 同步 + 数据库连接配置窗口 实施计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add remote MySQL synchronization with local SQLite fallback, plus a database connection configuration modal with in-app user registration and login.
+**目标：** 为 ToDoHelper 添加远程 MySQL 数据同步能力（本地 SQLite 作为离线缓存），并新增一个数据库连接配置窗口，支持在应用内注册和登录账号。
 
-**Architecture:** Rust backend connects directly to MySQL using `sqlx` (non-macro runtime queries to avoid compile-time DB requirements). Auth uses `bcrypt` for password hashing. Sync is bidirectional with timestamp-based conflict resolution. Frontend triggers sync asynchronously after local mutations. A modal handles MySQL connection testing and user auth.
+**架构：** Rust 后端通过 `sqlx` 直连 MySQL（使用运行时 API 避免编译期数据库依赖）。认证采用 `bcrypt` 哈希密码 + JWT token。同步引擎基于时间戳进行双向冲突解决。前端在每次本地数据变更后异步触发同步。配置窗口负责测试连接和完成用户认证。
 
-**Tech Stack:** Vue 3, Pinia, Tauri v2, Rust (`sqlx`, `bcrypt`, `jsonwebtoken`, `uuid`, `chrono`), SQLite (local cache), MySQL (remote)
-
----
-
-## File Structure
-
-| File | Responsibility |
-|------|----------------|
-| `src/db/init.js` | SQLite schema migration: add `updated_at`, `sync_state`, `local_uuid`; backfill UUIDs |
-| `src/db/taskQueries.js` | Update `insertTask`/`updateTask` to set `updated_at`, `local_uuid`, `sync_state` |
-| `src/db/syncQueries.js` | New: queries for pending tasks, last_sync_at, upsert by UUID, mark synced |
-| `src/db/settingQueries.js` | Add `hasMysqlConfig()` helper |
-| `src/stores/taskStore.js` | Add `syncStatus`, `triggerSync()`, wire sync into all mutations |
-| `src/components/SyncStatus.vue` | Small icon component showing sync state |
-| `src/components/DatabaseConfigModal.vue` | Two-step modal: connection test → login/register |
-| `src/components/TopBar.vue` | Add `SyncStatus` and db config button |
-| `src/components/Sidebar.vue` | Add db config menu item |
-| `src/App.vue` | Auto-open config modal on first launch; mount modal |
-| `src-tauri/Cargo.toml` | Add Rust dependencies |
-| `src-tauri/src/lib.rs` | App state, Tauri commands, command registration |
-| `src-tauri/src/mysql_client.rs` | MySQL connection pool creation |
-| `src-tauri/src/auth.rs` | Password hashing, JWT generation, register/login queries |
-| `src-tauri/src/sync.rs` | Push local tasks to MySQL, pull remote tasks by `updated_at` |
-| `src/stores/__tests__/taskStore.test.js` | Update mocks to include `sync_state`/`local_uuid` fields |
+**技术栈：** Vue 3、Pinia、Tauri v2、Rust（`sqlx`、`bcrypt`、`jsonwebtoken`、`uuid`、`chrono`）、SQLite（本地缓存）、MySQL（远程）
 
 ---
 
-## Design Notes
+## 文件结构
 
-- **No soft-delete sync:** Deletions remain local-only for this iteration. The sync engine handles creates and updates.
-- **Dynamic MySQL connection:** `sqlx::query` (runtime API) is used instead of `query!` macro so no compile-time database is required.
-- **Password handling:** MySQL connection password and app password are passed from frontend to Rust per request. MySQL host/port/database and app username are persisted in `app_settings`.
-- **Token storage:** JWT token and session live in Rust memory (`tauri::State`). After app restart, the user must re-authenticate.
+| 文件 | 职责 |
+|------|------|
+| `src/db/init.js` | SQLite 结构迁移：新增 `updated_at`、`sync_state`、`local_uuid`，并为旧数据补全 UUID |
+| `src/db/taskQueries.js` | 更新 `insertTask`/`updateTask`，写入 `updated_at`、`local_uuid`、`sync_state` |
+| `src/db/syncQueries.js` | 新增：获取待同步任务、读写 `last_sync_at`、按 UUID 覆盖/插入、标记已同步 |
+| `src/db/settingQueries.js` | 新增 `hasMysqlConfig()`、保存/读取 MySQL 连接配置 |
+| `src/stores/taskStore.js` | 新增 `syncStatus`、`triggerSync()`，将所有增删改操作与同步触发关联 |
+| `src/components/SyncStatus.vue` | 同步状态小图标组件 |
+| `src/components/DatabaseConfigModal.vue` | 两步式模态框：连接测试 → 登录/注册 |
+| `src/components/TopBar.vue` | 加入 `SyncStatus` 和数据库配置入口按钮 |
+| `src/components/Sidebar.vue` | 底部加入"数据库连接"菜单项 |
+| `src/App.vue` | 首次启动自动弹出配置窗口；挂载模态框；连接成功后触发同步 |
+| `src/views/MainView.vue` | 转发 `openDbConfig` 事件 |
+| `src-tauri/Cargo.toml` | 添加 Rust 依赖 |
+| `src-tauri/src/lib.rs` | 应用状态、Tauri 命令暴露、命令注册 |
+| `src-tauri/src/mysql_client.rs` | MySQL 连接池创建 |
+| `src-tauri/src/auth.rs` | 密码哈希、JWT 生成、注册/登录查询 |
+| `src-tauri/src/sync.rs` | 推送本地任务到 MySQL、按 `updated_at` 拉取远程变更 |
+| `src/stores/__tests__/taskStore.test.js` | 更新 mock，适配新增字段和同步行为 |
 
 ---
 
-### Task 1: Migrate SQLite Schema and Update Local Queries
+## 设计说明
 
-**Files:**
+- **暂不同步删除操作**：本轮迭代中删除仅作用于本地。同步引擎只处理新增和更新。
+- **动态 MySQL 连接**：Rust 中使用 `sqlx::query`（运行时 API），不使用 `query!` 宏，这样不需要在编译时连接数据库。
+- **密码处理**：MySQL 连接密码和应用登录密码均由前端传参给 Rust，每次请求携带。MySQL 主机、端口、数据库名和应用用户名持久化到 `app_settings`。
+- **Token 存储**：JWT token 和用户会话保存在 Rust 内存（`tauri::State`）。应用重启后需重新登录。
+
+---
+
+### Task 1：迁移 SQLite 结构并更新本地查询
+
+**涉及文件：**
 - Modify: `src/db/init.js`
 - Modify: `src/db/taskQueries.js`
 - Create: `src/db/syncQueries.js`
 - Modify: `src/db/settingQueries.js`
 
-- [ ] **Step 1.1: Update `init.js` to add new columns and backfill UUIDs**
+- [ ] **Step 1.1：修改 `init.js`，新增字段并为旧数据补全 UUID**
 
-Modify `src/db/init.js`:
+将 `src/db/init.js` 替换为：
 
 ```javascript
 import Database from '@tauri-apps/plugin-sql'
@@ -123,9 +124,9 @@ export async function initDb() {
 }
 ```
 
-- [ ] **Step 1.2: Update `taskQueries.js` to write `updated_at`, `local_uuid`, `sync_state`**
+- [ ] **Step 1.2：修改 `taskQueries.js`，写入 `updated_at`、`local_uuid`、`sync_state`**
 
-Replace `src/db/taskQueries.js`:
+将 `src/db/taskQueries.js` 替换为：
 
 ```javascript
 import { getDb } from './init.js'
@@ -182,9 +183,9 @@ export async function deleteTask(id) {
 }
 ```
 
-- [ ] **Step 1.3: Create `syncQueries.js`**
+- [ ] **Step 1.3：创建 `syncQueries.js`**
 
-Create `src/db/syncQueries.js`:
+创建 `src/db/syncQueries.js`：
 
 ```javascript
 import { getDb } from './init.js'
@@ -266,35 +267,74 @@ export async function upsertTaskByUuid(task) {
 }
 ```
 
-- [ ] **Step 1.4: Add `hasMysqlConfig` to `settingQueries.js`**
+- [ ] **Step 1.4：在 `settingQueries.js` 中新增 `hasMysqlConfig` 和配置读写方法**
 
-Append to `src/db/settingQueries.js`:
+将 `src/db/settingQueries.js` 替换为：
 
 ```javascript
+import { getDb } from './init.js'
+
+export async function getSetting(key) {
+  const db = await getDb()
+  const rows = await db.select('SELECT value FROM app_settings WHERE key = ?', [key])
+  return rows[0]?.value ?? null
+}
+
+export async function setSetting(key, value) {
+  const db = await getDb()
+  await db.execute(
+    'INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    [key, value]
+  )
+}
+
 export async function hasMysqlConfig() {
   const db = await getDb()
   const rows = await db.select("SELECT value FROM app_settings WHERE key = 'mysql_host'")
   return rows[0]?.value != null
 }
+
+export async function saveMysqlConfig({ host, port, database, username }) {
+  const db = await getDb()
+  await db.execute(
+    "INSERT INTO app_settings (key, value) VALUES ('mysql_host', ?), ('mysql_port', ?), ('mysql_database', ?), ('mysql_username', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    [host, String(port), database, username]
+  )
+}
+
+export async function getMysqlConfig() {
+  const db = await getDb()
+  const rows = await db.select("SELECT key, value FROM app_settings WHERE key LIKE 'mysql_%'")
+  const map = {}
+  for (const r of rows) {
+    map[r.key] = r.value
+  }
+  return {
+    host: map.mysql_host || '',
+    port: map.mysql_port ? parseInt(map.mysql_port, 10) : 3306,
+    database: map.mysql_database || '',
+    username: map.mysql_username || '',
+  }
+}
 ```
 
-- [ ] **Step 1.5: Commit**
+- [ ] **Step 1.5：提交代码**
 
 ```bash
 git add src/db/init.js src/db/taskQueries.js src/db/syncQueries.js src/db/settingQueries.js
-git commit -m "feat: migrate SQLite schema and add sync queries"
+git commit -m "feat: 迁移 SQLite 结构并新增同步相关查询"
 ```
 
 ---
 
-### Task 2: Add Rust Dependencies
+### Task 2：添加 Rust 依赖
 
-**Files:**
+**涉及文件：**
 - Modify: `src-tauri/Cargo.toml`
 
-- [ ] **Step 2.1: Add crates to `Cargo.toml`**
+- [ ] **Step 2.1：在 `Cargo.toml` 中添加依赖**
 
-Replace the `[dependencies]` section in `src-tauri/Cargo.toml`:
+将 `src-tauri/Cargo.toml` 的 `[dependencies]` 段替换为：
 
 ```toml
 [dependencies]
@@ -310,32 +350,32 @@ chrono = { version = "0.4", features = ["serde"] }
 tokio = { version = "1", features = ["full"] }
 ```
 
-- [ ] **Step 2.2: Verify lockfile update**
+- [ ] **Step 2.2：检查依赖解析是否成功**
 
-Run:
+运行：
 ```bash
 cd src-tauri && cargo check
 ```
-Expected: Cargo resolves and downloads dependencies. Output ends with `Finished dev [unoptimized + debuginfo] target(s)` or similar.
+预期：Cargo 成功下载并解析依赖，最终输出类似 `Finished dev [unoptimized + debuginfo] target(s)`。
 
-- [ ] **Step 2.3: Commit**
+- [ ] **Step 2.3：提交代码**
 
 ```bash
 git add src-tauri/Cargo.toml
-git commit -m "chore: add sqlx, bcrypt, jwt, uuid, chrono, tokio deps"
+git commit -m "chore: 添加 sqlx、bcrypt、jwt、uuid、chrono、tokio 依赖"
 ```
 
 ---
 
-### Task 3: Create Rust MySQL Client Module
+### Task 3：创建 Rust MySQL 客户端模块
 
-**Files:**
+**涉及文件：**
 - Create: `src-tauri/src/mysql_client.rs`
 - Modify: `src-tauri/src/lib.rs`
 
-- [ ] **Step 3.1: Write `mysql_client.rs`**
+- [ ] **Step 3.1：编写 `mysql_client.rs`**
 
-Create `src-tauri/src/mysql_client.rs`:
+创建 `src-tauri/src/mysql_client.rs`：
 
 ```rust
 use sqlx::mysql::MySqlPoolOptions;
@@ -356,9 +396,9 @@ pub async fn create_pool(config: &MysqlConfig) -> Result<MySqlPool, String> {
 }
 ```
 
-- [ ] **Step 3.2: Register module in `lib.rs`**
+- [ ] **Step 3.2：在 `lib.rs` 中注册模块**
 
-Add at the top of `src-tauri/src/lib.rs` (before existing code):
+在 `src-tauri/src/lib.rs` 顶部（在现有代码之前）添加：
 
 ```rust
 mod auth;
@@ -366,24 +406,24 @@ mod mysql_client;
 mod sync;
 ```
 
-- [ ] **Step 3.3: Commit**
+- [ ] **Step 3.3：提交代码**
 
 ```bash
 git add src-tauri/src/mysql_client.rs src-tauri/src/lib.rs
-git commit -m "feat: add Rust MySQL client module"
+git commit -m "feat: 添加 Rust MySQL 客户端模块"
 ```
 
 ---
 
-### Task 4: Create Rust Auth Module
+### Task 4：创建 Rust 认证模块
 
-**Files:**
+**涉及文件：**
 - Create: `src-tauri/src/auth.rs`
-- Modify: `src-tauri/src/lib.rs` (state struct, later)
+- Modify: `src-tauri/src/lib.rs`（后续会在此定义状态结构体）
 
-- [ ] **Step 4.1: Write `auth.rs` with bcrypt + JWT**
+- [ ] **Step 4.1：编写 `auth.rs`，包含 bcrypt 和 JWT**
 
-Create `src-tauri/src/auth.rs`:
+创建 `src-tauri/src/auth.rs`：
 
 ```rust
 use bcrypt::{hash, verify, DEFAULT_COST};
@@ -472,31 +512,31 @@ mod tests {
 }
 ```
 
-- [ ] **Step 4.2: Run Rust auth tests**
+- [ ] **Step 4.2：运行 Rust 认证单元测试**
 
-Run:
+运行：
 ```bash
 cd src-tauri && cargo test auth::tests -- --nocapture
 ```
-Expected: `running 2 tests`, both `test auth::tests::test_hash_and_verify_password ... ok` and `test auth::tests::test_generate_token ... ok`.
+预期：输出 `running 2 tests`，两个测试均通过。
 
-- [ ] **Step 4.3: Commit**
+- [ ] **Step 4.3：提交代码**
 
 ```bash
 git add src-tauri/src/auth.rs
-git commit -m "feat: add Rust auth module with bcrypt and JWT"
+git commit -m "feat: 添加 Rust 认证模块（bcrypt + JWT）"
 ```
 
 ---
 
-### Task 5: Create Rust Sync Module
+### Task 5：创建 Rust 同步引擎模块
 
-**Files:**
+**涉及文件：**
 - Create: `src-tauri/src/sync.rs`
 
-- [ ] **Step 5.1: Write `sync.rs` with push and pull logic**
+- [ ] **Step 5.1：编写 `sync.rs`，包含推送和拉取逻辑**
 
-Create `src-tauri/src/sync.rs`:
+创建 `src-tauri/src/sync.rs`：
 
 ```rust
 use serde::{Deserialize, Serialize};
@@ -613,23 +653,23 @@ pub async fn pull_tasks(
 }
 ```
 
-- [ ] **Step 5.2: Commit**
+- [ ] **Step 5.2：提交代码**
 
 ```bash
 git add src-tauri/src/sync.rs
-git commit -m "feat: add Rust sync engine with push/pull and timestamp conflict resolution"
+git commit -m "feat: 添加 Rust 同步引擎（推送/拉取 + 时间戳冲突解决）"
 ```
 
 ---
 
-### Task 6: Wire Rust Commands and State into `lib.rs`
+### Task 6：在 `lib.rs` 中注册命令和状态
 
-**Files:**
+**涉及文件：**
 - Modify: `src-tauri/src/lib.rs`
 
-- [ ] **Step 6.1: Replace `lib.rs` with full command set**
+- [ ] **Step 6.1：将 `lib.rs` 替换为完整命令集**
 
-Replace `src-tauri/src/lib.rs` entirely:
+将 `src-tauri/src/lib.rs` 完整替换为：
 
 ```rust
 mod auth;
@@ -812,31 +852,31 @@ pub fn run() {
 }
 ```
 
-- [ ] **Step 6.2: Verify Rust compiles**
+- [ ] **Step 6.2：验证 Rust 编译通过**
 
-Run:
+运行：
 ```bash
 cd src-tauri && cargo check
 ```
-Expected: No errors.
+预期：无编译错误。
 
-- [ ] **Step 6.3: Commit**
+- [ ] **Step 6.3：提交代码**
 
 ```bash
 git add src-tauri/src/lib.rs
-git commit -m "feat: wire MySQL auth and sync commands into Tauri"
+git commit -m "feat: 将 MySQL 认证与同步命令接入 Tauri"
 ```
 
 ---
 
-### Task 7: Add Sync Integration to `taskStore.js`
+### Task 7：为 `taskStore.js` 添加同步集成
 
-**Files:**
+**涉及文件：**
 - Modify: `src/stores/taskStore.js`
 
-- [ ] **Step 7.1: Update `taskStore.js` with sync status and trigger**
+- [ ] **Step 7.1：更新 `taskStore.js`，增加同步状态和触发器**
 
-Replace `src/stores/taskStore.js`:
+将 `src/stores/taskStore.js` 替换为：
 
 ```javascript
 import { defineStore } from 'pinia'
@@ -992,23 +1032,23 @@ export const useTaskStore = defineStore('task', () => {
 })
 ```
 
-- [ ] **Step 7.2: Commit**
+- [ ] **Step 7.2：提交代码**
 
 ```bash
 git add src/stores/taskStore.js
-git commit -m "feat: integrate sync trigger and syncStatus into taskStore"
+git commit -m "feat: 在 taskStore 中集成同步触发器与 syncStatus"
 ```
 
 ---
 
-### Task 8: Create SyncStatus Component
+### Task 8：创建同步状态组件
 
-**Files:**
+**涉及文件：**
 - Create: `src/components/SyncStatus.vue`
 
-- [ ] **Step 8.1: Write `SyncStatus.vue`**
+- [ ] **Step 8.1：编写 `SyncStatus.vue`**
 
-Create `src/components/SyncStatus.vue`:
+创建 `src/components/SyncStatus.vue`：
 
 ```vue
 <script setup>
@@ -1045,24 +1085,24 @@ const labels = {
 </style>
 ```
 
-- [ ] **Step 8.2: Commit**
+- [ ] **Step 8.2：提交代码**
 
 ```bash
 git add src/components/SyncStatus.vue
-git commit -m "feat: add SyncStatus component"
+git commit -m "feat: 添加 SyncStatus 同步状态组件"
 ```
 
 ---
 
-### Task 9: Update TopBar and Sidebar
+### Task 9：更新 TopBar 和 Sidebar
 
-**Files:**
+**涉及文件：**
 - Modify: `src/components/TopBar.vue`
 - Modify: `src/components/Sidebar.vue`
 
-- [ ] **Step 9.1: Add SyncStatus and db config button to `TopBar.vue`**
+- [ ] **Step 9.1：在 `TopBar.vue` 中加入 SyncStatus 和数据库配置入口**
 
-Replace `src/components/TopBar.vue`:
+将 `src/components/TopBar.vue` 替换为：
 
 ```vue
 <script setup>
@@ -1154,9 +1194,9 @@ const emit = defineEmits(['enterFloat', 'update:searchQuery', 'openDbConfig'])
 </style>
 ```
 
-- [ ] **Step 9.2: Add db config button to `Sidebar.vue`**
+- [ ] **Step 9.2：在 `Sidebar.vue` 中加入数据库连接菜单项**
 
-Replace `src/components/Sidebar.vue`:
+将 `src/components/Sidebar.vue` 替换为：
 
 ```vue
 <script setup>
@@ -1243,54 +1283,23 @@ const filters = [
 </style>
 ```
 
-- [ ] **Step 9.3: Commit**
+- [ ] **Step 9.3：提交代码**
 
 ```bash
 git add src/components/TopBar.vue src/components/Sidebar.vue
-git commit -m "feat: add SyncStatus to TopBar and db config entry to Sidebar"
+git commit -m "feat: 在 TopBar 显示同步状态，在 Sidebar 增加数据库连接入口"
 ```
 
 ---
 
-### Task 10: Create DatabaseConfigModal Component
+### Task 10：创建数据库配置模态框组件
 
-**Files:**
+**涉及文件：**
 - Create: `src/components/DatabaseConfigModal.vue`
-- Modify: `src/db/settingQueries.js`
 
-- [ ] **Step 10.1: Add config save helpers to `settingQueries.js`**
+- [ ] **Step 10.1：编写 `DatabaseConfigModal.vue`**
 
-Append to `src/db/settingQueries.js`:
-
-```javascript
-export async function saveMysqlConfig({ host, port, database, username }) {
-  const db = await getDb()
-  await db.execute(
-    "INSERT INTO app_settings (key, value) VALUES ('mysql_host', ?), ('mysql_port', ?), ('mysql_database', ?), ('mysql_username', ?)
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-    [host, String(port), database, username]
-  )
-}
-
-export async function getMysqlConfig() {
-  const db = await getDb()
-  const rows = await db.select("SELECT key, value FROM app_settings WHERE key LIKE 'mysql_%'")
-  const map = {}
-  for (const r of rows) {
-    map[r.key] = r.value
-  }
-  return {
-    host: map.mysql_host || '',
-    port: map.mysql_port ? parseInt(map.mysql_port, 10) : 3306,
-    database: map.mysql_database || '',
-    username: map.mysql_username || '',
-  }
-}
-```
-
-- [ ] **Step 10.2: Write `DatabaseConfigModal.vue`**
-
-Create `src/components/DatabaseConfigModal.vue`:
+创建 `src/components/DatabaseConfigModal.vue`：
 
 ```vue
 <script setup>
@@ -1584,24 +1593,24 @@ function onBackdrop(e) {
 </style>
 ```
 
-- [ ] **Step 10.3: Commit**
+- [ ] **Step 10.2：提交代码**
 
 ```bash
-git add src/components/DatabaseConfigModal.vue src/db/settingQueries.js
-git commit -m "feat: add DatabaseConfigModal with connection test and auth flow"
+git add src/components/DatabaseConfigModal.vue
+git commit -m "feat: 添加 DatabaseConfigModal 数据库配置模态框"
 ```
 
 ---
 
-### Task 11: Wire Config Modal into App and MainView
+### Task 11：将配置模态框接入 App 和 MainView
 
-**Files:**
+**涉及文件：**
 - Modify: `src/App.vue`
 - Modify: `src/views/MainView.vue`
 
-- [ ] **Step 11.1: Update `App.vue` to manage modal visibility and trigger sync on connect**
+- [ ] **Step 11.1：更新 `App.vue`，管理模态框显隐并在连接成功后触发同步**
 
-Replace `src/App.vue`:
+将 `src/App.vue` 替换为：
 
 ```vue
 <script setup>
@@ -1684,16 +1693,16 @@ function onDbConnected() {
 </style>
 ```
 
-- [ ] **Step 11.2: Update `MainView.vue` to forward db-config event**
+- [ ] **Step 11.2：更新 `MainView.vue`，转发 db-config 事件**
 
-Modify `src/views/MainView.vue`. Change the script setup emit line:
+修改 `src/views/MainView.vue`：
 
+将 `const emit = defineEmits(['enterFloat'])` 改为：
 ```javascript
 const emit = defineEmits(['enterFloat', 'openDbConfig'])
 ```
 
-And change the `<TopBar>` usage:
-
+将 `<TopBar>` 标签替换为：
 ```vue
 <TopBar
   :search-query="taskStore.searchQuery"
@@ -1703,30 +1712,28 @@ And change the `<TopBar>` usage:
 />
 ```
 
-And change the `<Sidebar>` tag to:
-
+将 `<Sidebar />` 标签替换为：
 ```vue
 <Sidebar @open-db-config="emit('openDbConfig')" />
 ```
 
-- [ ] **Step 11.3: Commit**
+- [ ] **Step 11.3：提交代码**
 
 ```bash
 git add src/App.vue src/views/MainView.vue
-git commit -m "feat: wire DatabaseConfigModal into app startup and main view"
+git commit -m "feat: 将数据库配置模态框接入应用启动流程和主视图"
 ```
 
 ---
 
-### Task 12: Update Frontend Tests
+### Task 12：更新前端测试
 
-**Files:**
+**涉及文件：**
 - Modify: `src/stores/__tests__/taskStore.test.js`
-- Modify: `src/stores/__tests__/settingStore.test.js`
 
-- [ ] **Step 12.1: Mock new sync queries in taskStore test**
+- [ ] **Step 12.1：在 taskStore 测试中 mock 同步查询和 invoke**
 
-Replace `src/stores/__tests__/taskStore.test.js`:
+将 `src/stores/__tests__/taskStore.test.js` 替换为：
 
 ```javascript
 import { describe, it, expect, beforeEach, vi } from 'vitest'
@@ -1840,106 +1847,93 @@ describe('taskStore', () => {
 })
 ```
 
-- [ ] **Step 12.2: Run frontend tests**
+- [ ] **Step 12.2：运行前端测试**
 
-Run:
+运行：
 ```bash
 npm run test:run
 ```
-Expected: All tests pass.
+预期：所有测试通过。
 
-- [ ] **Step 12.3: Commit**
+- [ ] **Step 12.3：提交代码**
 
 ```bash
 git add src/stores/__tests__/taskStore.test.js
-git commit -m "test: update taskStore tests for sync integration"
+git commit -m "test: 更新 taskStore 测试以适配同步集成"
 ```
 
 ---
 
-### Task 13: Final Verification
+### Task 13：最终验证
 
-**Files:** All touched files.
+**涉及文件：** 所有已修改文件。
 
-- [ ] **Step 13.1: Run Rust tests**
+- [ ] **Step 13.1：运行 Rust 测试**
 
-Run:
+运行：
 ```bash
 cd src-tauri && cargo test
 ```
-Expected: `test result: ok` for all tests.
+预期：所有测试通过，输出 `test result: ok`。
 
-- [ ] **Step 13.2: Run frontend tests**
+- [ ] **Step 13.2：运行前端测试**
 
-Run:
+运行：
 ```bash
 npm run test:run
 ```
-Expected: All tests pass.
+预期：所有测试通过。
 
-- [ ] **Step 13.3: Run dev build smoke test**
+- [ ] **Step 13.3：运行构建冒烟测试**
 
-Run:
+运行：
 ```bash
 npm run build
 ```
-Expected: Vite build completes with no errors.
+预期：Vite 构建成功，无错误。
 
-- [ ] **Step 13.4: Commit any remaining fixes**
+- [ ] **Step 13.4：如有修复则提交**
 
-If fixes were needed:
+如需修复：
 ```bash
 git add -A
-git commit -m "fix: address integration issues"
+git commit -m "fix: 修复集成过程中的问题"
 ```
 
 ---
 
-## Self-Review
+## 自检
 
-### Spec Coverage Check
+### 规格覆盖检查
 
-| Spec Requirement | Implementing Task |
-|------------------|-------------------|
-| SQLite schema migration (`updated_at`, `sync_state`, `local_uuid`) | Task 1 |
-| Backfill existing tasks with UUID | Task 1 |
-| Rust `sqlx` MySQL client | Task 2, 3 |
-| bcrypt password hashing | Task 4 |
-| JWT generation | Task 4 |
-| Register/login commands | Task 6 |
-| Bidirectional sync with timestamp conflict resolution | Task 5, 7 |
-| `last_sync_at` tracking | Task 1, 5, 7 |
-| `DatabaseConfigModal.vue` two-step flow | Task 10 |
-| Sync status indicator | Task 8, 9 |
-| First-launch auto-open config | Task 11 |
-| Sidebar db config entry | Task 9 |
-| Offline/error state handling | Task 7 |
-| Persist connection params (not password) | Task 10 |
+| 规格需求 | 对应任务 |
+|----------|----------|
+| SQLite 结构迁移（`updated_at`、`sync_state`、`local_uuid`） | Task 1 |
+| 为旧任务补全 UUID | Task 1 |
+| Rust `sqlx` MySQL 客户端 | Task 2、3 |
+| bcrypt 密码哈希 | Task 4 |
+| JWT 生成 | Task 4 |
+| 注册/登录命令 | Task 6 |
+| 双向同步 + 时间戳冲突解决 | Task 5、7 |
+| `last_sync_at` 跟踪 | Task 1、5、7 |
+| `DatabaseConfigModal.vue` 两步流程 | Task 10 |
+| 同步状态指示器 | Task 8、9 |
+| 首次启动自动弹出配置 | Task 11 |
+| Sidebar 数据库连接入口 | Task 9 |
+| 离线/错误状态处理 | Task 7 |
+| 持久化连接参数（不含密码） | Task 10 |
 
-**No gaps identified.**
+**无遗漏。**
 
-### Placeholder Scan
+### 占位符检查
 
-- No `TBD`, `TODO`, or `implement later` strings found.
-- All test steps include actual test code.
-- No vague instructions like "add appropriate error handling" — specific behaviors are defined.
+- 无 `TBD`、`TODO`、`implement later`。
+- 所有测试步骤均包含实际测试代码。
+- 无模糊指令如"适当添加错误处理"，所有行为均已明确指定。
 
-### Type Consistency Check
+### 类型一致性检查
 
-- `MysqlConfig` fields: `host`, `port`, `database`, `username`, `password` — consistent across Rust and JS.
-- `syncStatus` values: `idle | syncing | error | offline` — consistent in store and UI.
-- `LocalTask`/`RemoteTask` field names match between Rust sync module and frontend sync queries.
-- `invoke('sync_tasks', { pendingTasks, lastSyncAt })` matches Rust command signature.
-
----
-
-## Execution Handoff
-
-**Plan complete and saved to `docs/superpowers/plans/2026-04-17-mysql-sync.md`.**
-
-Two execution options:
-
-1. **Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, fast iteration
-2. **Inline Execution** - Execute tasks in this session using executing-plans, batch execution with checkpoints for review
-
-Which approach would you like?
+- `MysqlConfig` 字段：`host`、`port`、`database`、`username`、`password`，在 Rust 与 JS 中一致。
+- `syncStatus` 取值：`idle | syncing | error | offline`，在 store 与 UI 中一致。
+- `LocalTask`/`RemoteTask` 字段名，在 Rust 同步模块与前端查询中一致。
+- `invoke('sync_tasks', { pendingTasks, lastSyncAt })` 与 Rust 命令签名匹配。
