@@ -1,4 +1,16 @@
+mod mysql_client;
+
+use serde::Deserialize;
 use tauri::{command, generate_context, generate_handler, Builder, WebviewWindow};
+
+#[derive(Deserialize)]
+pub struct MysqlConfig {
+    pub host: String,
+    pub port: u16,
+    pub database: String,
+    pub username: String,
+    pub password: String,
+}
 
 #[command]
 fn set_float_mode(window: WebviewWindow) -> Result<(), String> {
