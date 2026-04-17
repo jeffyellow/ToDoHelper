@@ -1,4 +1,5 @@
 import Database from '@tauri-apps/plugin-sql'
+import { generateUuid } from './uuid.js'
 
 let db = null
 
@@ -7,17 +8,6 @@ export async function getDb() {
     db = await Database.load('sqlite:todo.db')
   }
   return db
-}
-
-function generateUuid() {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID()
-  }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-    const r = Math.random() * 16 | 0
-    const v = c === 'x' ? r : (r & 0x3 | 0x8)
-    return v.toString(16)
-  })
 }
 
 export async function initDb() {
@@ -55,6 +45,25 @@ export async function initDb() {
   for (const task of tasksWithoutUuid) {
     const uuid = generateUuid()
     await database.execute('UPDATE tasks SET local_uuid = ? WHERE id = ?', [uuid, task.id])
+  }
+
+  // Fix any duplicate local_uuid values before creating unique index
+  const duplicateRows = await database.select(
+    'SELECT local_uuid FROM tasks WHERE local_uuid IS NOT NULL GROUP BY local_uuid HAVING COUNT(*) > 1'
+  )
+  for (const row of duplicateRows) {
+    const dups = await database.select('SELECT id FROM tasks WHERE local_uuid = ?', [row.local_uuid])
+    // Skip the first one, regenerate the rest
+    for (let i = 1; i < dups.length; i++) {
+      const newUuid = generateUuid()
+      await database.execute('UPDATE tasks SET local_uuid = ? WHERE id = ?', [newUuid, dups[i].id])
+    }
+  }
+
+  const indexes = await database.select('PRAGMA index_list(tasks)')
+  const hasUuidIndex = indexes.some((i) => i.name === 'idx_tasks_local_uuid')
+  if (!hasUuidIndex) {
+    await database.execute('CREATE UNIQUE INDEX idx_tasks_local_uuid ON tasks(local_uuid)')
   }
 
   await database.execute(`

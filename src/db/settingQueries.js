@@ -20,6 +20,8 @@ export async function hasMysqlConfig() {
   return rows[0]?.value != null
 }
 
+// MySQL password is intentionally not persisted locally.
+// It is passed from the UI to Rust on a per-request basis.
 export async function saveMysqlConfig({ host, port, database, username }) {
   const db = await getDb()
   await db.execute(
@@ -30,7 +32,7 @@ export async function saveMysqlConfig({ host, port, database, username }) {
 
 export async function getMysqlConfig() {
   const db = await getDb()
-  const rows = await db.select("SELECT key, value FROM app_settings WHERE key LIKE 'mysql_%'")
+  const rows = await db.select("SELECT key, value FROM app_settings WHERE key IN ('mysql_host', 'mysql_port', 'mysql_database', 'mysql_username')")
   const map = {}
   for (const r of rows) {
     map[r.key] = r.value
