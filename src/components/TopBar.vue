@@ -1,9 +1,12 @@
 <script setup>
-import { Search, PictureInPicture } from 'lucide-vue-next'
+import { Search, PictureInPicture, Database } from 'lucide-vue-next'
 import ThemeToggle from './ThemeToggle.vue'
+import SyncStatus from './SyncStatus.vue'
+import { useTaskStore } from '../stores/taskStore.js'
 
+const taskStore = useTaskStore()
 defineProps({ searchQuery: String })
-const emit = defineEmits(['enterFloat', 'update:searchQuery'])
+const emit = defineEmits(['enterFloat', 'update:searchQuery', 'openDbConfig'])
 </script>
 
 <template>
@@ -18,7 +21,11 @@ const emit = defineEmits(['enterFloat', 'update:searchQuery'])
       />
     </div>
     <div class="actions">
+      <SyncStatus :status="taskStore.syncStatus" />
       <ThemeToggle />
+      <button class="icon-btn" @click="emit('openDbConfig')" title="数据库连接">
+        <Database :size="20" />
+      </button>
       <button class="icon-btn" @click="emit('enterFloat')" title="悬浮窗">
         <PictureInPicture :size="20" />
       </button>
