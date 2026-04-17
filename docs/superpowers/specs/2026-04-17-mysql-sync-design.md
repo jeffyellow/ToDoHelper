@@ -123,12 +123,13 @@ CREATE TABLE tasks (
 1. 前端把本地 `sync_state = 'pending'` 的任务列表传给 Rust。
 2. Rust 将这些任务上传到远程 MySQL，使用 `INSERT ... ON DUPLICATE KEY UPDATE`：
    - 仅当本地 `updated_at >= 远程 updated_at` 时才覆盖。
-3. Rust 从 MySQL 拉取该用户下 `updated_at > 上次同步时间` 的远程任务。
+3. Rust 从 MySQL 拉取该用户下 `updated_at > 上次同步时间` 的远程任务。（上次同步时间存储在本地 `app_settings.last_sync_at` 中。）
 4. 对每条远程任务：
    - 若本地存在同名 `local_uuid`：比较 `updated_at`，新者覆盖本地。
    - 若不存在：插入本地 SQLite。
 5. 更新本地 `sync_state` 为 `'synced'`。
-6. 若本地数据有变化，通知前端 `taskStore` 重新加载。
+6. 更新 `app_settings.last_sync_at` 为当前时间。
+7. 若本地数据有变化，通知前端 `taskStore` 重新加载。
 
 ### 4.3 离线处理
 
