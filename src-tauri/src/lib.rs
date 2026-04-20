@@ -1,4 +1,5 @@
 mod auth;
+mod crypto;
 mod mysql_client;
 mod sync;
 
@@ -17,6 +18,7 @@ pub struct MysqlConfig {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RegisterPayload {
     pub config: MysqlConfig,
     pub app_username: String,
@@ -24,6 +26,7 @@ pub struct RegisterPayload {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LoginPayload {
     pub config: MysqlConfig,
     pub app_username: String,
@@ -36,10 +39,24 @@ pub struct AuthResult {
     pub user_id: i32,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncPayload {
+    pub pending_tasks: Vec<sync::LocalTask>,
+    pub last_sync_at: Option<String>,
+}
+
 #[derive(Serialize)]
 pub struct SyncResult {
     pub pulled_tasks: Vec<sync::RemoteTask>,
     pub new_last_sync_at: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreSessionPayload {
+    pub encrypted_password: String,
+    pub config: MysqlConfig,
 }
 
 pub struct UserSession {
@@ -167,8 +184,7 @@ async fn login_user(
 
 #[command]
 async fn sync_tasks(
-    pending_tasks: Vec<sync::LocalTask>,
-    last_sync_at: Option<String>,
+    payload: SyncPayload,
     state: State<'_, Arc<AppState>>,
 ) -> Result<SyncResult, String> {
     let pool_guard = state.mysql_pool.lock().await;
@@ -179,8 +195,8 @@ async fn sync_tasks(
     auth::verify_token(&user.token, state.jwt_secret.as_bytes())
         .map_err(|_| "登录已过期，请重新连接")?;
 
-    sync::push_tasks(pool, user.user_id, &pending_tasks).await?;
-    let pulled_tasks = sync::pull_tasks(pool, user.user_id, last_sync_at.as_deref()).await?;
+    sync::push_tasks(pool, user.user_id, &payload.pending_tasks).await?;
+    let pulled_tasks = sync::pull_tasks(pool, user.user_id, payload.last_sync_at.as_deref()).await?;
 
     let now = chrono::Local::now()
         .naive_local()
@@ -191,6 +207,55 @@ async fn sync_tasks(
         pulled_tasks,
         new_last_sync_at: now,
     })
+}
+
+#[command]
+fn encrypt_password(password: String, secret: String) -> Result<String, String> {
+    crypto::encrypt(&password, &secret)
+}
+
+#[command]
+fn decrypt_password(ciphertext: String, secret: String) -> Result<String, String> {
+    crypto::decrypt(&ciphertext, &secret)
+}
+
+#[command]
+async fn restore_session(
+    payload: RestoreSessionPayload,
+    state: State<'_, Arc<AppState>>,
+) -> Result<AuthResult, String> {
+    let pool = mysql_client::create_pool(&payload.config).await?;
+    ensure_mysql_schema(&pool).await?;
+
+    let user_guard = state.current_user.lock().await;
+    let user = user_guard.as_ref().ok_or("No active session")?;
+
+    auth::verify_token(&user.token, state.jwt_secret.as_bytes())
+        .map_err(|_| "登录已过期，请重新连接")?;
+
+    let decrypted_password = crypto::decrypt(&payload.encrypted_password, &state.jwt_secret)?;
+
+    let (user_id, token) = auth::login_user(
+        &pool,
+        &user.username,
+        &decrypted_password,
+        state.jwt_secret.as_bytes(),
+    )
+    .await?;
+
+    let result = AuthResult {
+        token: token.clone(),
+        user_id,
+    };
+
+    *state.mysql_pool.lock().await = Some(pool);
+    *state.current_user.lock().await = Some(UserSession {
+        user_id,
+        username: user.username.clone(),
+        token,
+    });
+
+    Ok(result)
 }
 
 #[command]
@@ -237,6 +302,9 @@ pub fn run() {
             register_user,
             login_user,
             sync_tasks,
+            encrypt_password,
+            decrypt_password,
+            restore_session,
         ])
         .run(generate_context!())
         .expect("error while running tauri application");
