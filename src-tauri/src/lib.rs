@@ -55,8 +55,10 @@ pub struct SyncResult {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RestoreSessionPayload {
-    pub encrypted_password: String,
     pub config: MysqlConfig,
+    pub token: String,
+    pub user_id: i32,
+    pub username: String,
 }
 
 pub struct UserSession {
@@ -210,52 +212,33 @@ async fn sync_tasks(
 }
 
 #[command]
-fn encrypt_password(password: String, secret: String) -> Result<String, String> {
-    crypto::encrypt(&password, &secret)
+fn encrypt_password(password: String, state: State<'_, Arc<AppState>>) -> Result<String, String> {
+    crypto::encrypt(&password, &state.jwt_secret)
 }
 
 #[command]
-fn decrypt_password(ciphertext: String, secret: String) -> Result<String, String> {
-    crypto::decrypt(&ciphertext, &secret)
+fn decrypt_password(encrypted: String, state: State<'_, Arc<AppState>>) -> Result<String, String> {
+    crypto::decrypt(&encrypted, &state.jwt_secret)
 }
 
 #[command]
 async fn restore_session(
     payload: RestoreSessionPayload,
     state: State<'_, Arc<AppState>>,
-) -> Result<AuthResult, String> {
+) -> Result<(), String> {
     let pool = mysql_client::create_pool(&payload.config).await?;
-    ensure_mysql_schema(&pool).await?;
 
-    let user_guard = state.current_user.lock().await;
-    let user = user_guard.as_ref().ok_or("No active session")?;
-
-    auth::verify_token(&user.token, state.jwt_secret.as_bytes())
-        .map_err(|_| "登录已过期，请重新连接")?;
-
-    let decrypted_password = crypto::decrypt(&payload.encrypted_password, &state.jwt_secret)?;
-
-    let (user_id, token) = auth::login_user(
-        &pool,
-        &user.username,
-        &decrypted_password,
-        state.jwt_secret.as_bytes(),
-    )
-    .await?;
-
-    let result = AuthResult {
-        token: token.clone(),
-        user_id,
-    };
+    auth::verify_token(&payload.token, state.jwt_secret.as_bytes())
+        .map_err(|_| "登录已过期，请重新登录")?;
 
     *state.mysql_pool.lock().await = Some(pool);
     *state.current_user.lock().await = Some(UserSession {
-        user_id,
-        username: user.username.clone(),
-        token,
+        user_id: payload.user_id,
+        username: payload.username,
+        token: payload.token,
     });
 
-    Ok(result)
+    Ok(())
 }
 
 #[command]
