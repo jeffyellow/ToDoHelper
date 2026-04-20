@@ -1,9 +1,9 @@
 <script setup>
 import { useTaskStore } from '../stores/taskStore.js'
-import { Database } from 'lucide-vue-next'
+import ConnectionStatus from './ConnectionStatus.vue'
 
 const taskStore = useTaskStore()
-const emit = defineEmits(['openDbConfig'])
+const emit = defineEmits(['openAuth'])
 const filters = [
   { label: '进行中', key: 'active' },
   { label: '未开始', key: 'pending' },
@@ -26,10 +26,7 @@ const filters = [
       </button>
     </nav>
     <div class="spacer" />
-    <button class="nav-item db-item" @click="emit('openDbConfig')">
-      <Database :size="16" />
-      <span>数据库连接</span>
-    </button>
+    <ConnectionStatus @open-auth="emit('openAuth')" />
   </aside>
 </template>
 
@@ -75,8 +72,5 @@ const filters = [
 }
 .spacer {
   flex: 1;
-}
-.db-item {
-  margin-top: 8px;
 }
 </style>
