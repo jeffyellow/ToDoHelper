@@ -87,3 +87,10 @@ export async function clearAuthSession() {
     "DELETE FROM app_settings WHERE key IN ('auth_token', 'auth_user_id', 'auth_username')"
   )
 }
+
+export async function clearEncryptedPassword() {
+  const db = await getDb()
+  await db.execute(
+    "DELETE FROM app_settings WHERE key = 'mysql_password_enc'"
+  )
+}

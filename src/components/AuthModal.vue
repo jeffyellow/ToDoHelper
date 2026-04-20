@@ -2,7 +2,7 @@
 import { ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { useSettingStore } from '../stores/settingStore.js'
-import { getMysqlConfig, getEncryptedPassword } from '../db/settingQueries.js'
+import { getMysqlConfig, getEncryptedPassword, clearEncryptedPassword } from '../db/settingQueries.js'
 
 const props = defineProps({ open: Boolean })
 const emit = defineEmits(['close', 'loggedIn'])
@@ -17,8 +17,6 @@ const appUsername = ref('')
 const appPassword = ref('')
 const confirmPassword = ref('')
 
-const mysqlConfig = ref({ host: '', port: 3306, database: '', username: '' })
-
 watch(() => props.open, async (open) => {
   if (open) {
     error.value = ''
@@ -26,8 +24,6 @@ watch(() => props.open, async (open) => {
     appUsername.value = ''
     appPassword.value = ''
     confirmPassword.value = ''
-    const cfg = await getMysqlConfig()
-    mysqlConfig.value = cfg
   }
 })
 
@@ -35,7 +31,8 @@ async function handleAuth() {
   isLoading.value = true
   error.value = ''
   try {
-    if (!mysqlConfig.value.host) {
+    const mysqlConfig = await getMysqlConfig()
+    if (!mysqlConfig.host) {
       error.value = '请先配置数据库连接'
       isLoading.value = false
       return
@@ -47,8 +44,18 @@ async function handleAuth() {
       isLoading.value = false
       return
     }
-    const password = await invoke('decrypt_password', { encrypted: encryptedPw })
-    const config = { ...mysqlConfig.value, password }
+
+    let password
+    try {
+      password = await invoke('decrypt_password', { encrypted: encryptedPw })
+    } catch {
+      await clearEncryptedPassword()
+      error.value = '数据库密码已失效，请重新配置数据库连接'
+      isLoading.value = false
+      return
+    }
+
+    const config = { ...mysqlConfig, password }
 
     if (authTab.value === 'register') {
       if (appPassword.value !== confirmPassword.value) {
@@ -103,11 +110,6 @@ function onBackdrop(e) {
   <div v-if="open" class="modal-backdrop" @click="onBackdrop">
     <div class="modal">
       <h3 class="modal-title">{{ authTab === 'register' ? '注册账号' : '登录账号' }}</h3>
-
-      <div class="info">
-        <p>数据库：{{ mysqlConfig.host || '未配置' }}:{{ mysqlConfig.port }}/{{ mysqlConfig.database }}</p>
-        <p>MySQL 用户：{{ mysqlConfig.username || '未配置' }}</p>
-      </div>
 
       <div class="tabs">
         <button :class="{ active: authTab === 'login' }" @click="authTab = 'login'">登录</button>
@@ -165,14 +167,6 @@ function onBackdrop(e) {
   margin: 0 0 12px;
   font-size: 18px;
   font-weight: 600;
-}
-.info {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-bottom: 12px;
-}
-.info p {
-  margin: 2px 0;
 }
 .form {
   display: flex;

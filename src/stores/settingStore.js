@@ -8,6 +8,7 @@ import {
   getAuthSession,
   saveAuthSession,
   clearAuthSession,
+  clearEncryptedPassword,
   saveEncryptedPassword,
 } from '../db/settingQueries.js'
 
@@ -60,6 +61,7 @@ export const useSettingStore = defineStore('setting', () => {
       isLoggedIn.value = false
       currentUser.value = null
       await clearAuthSession()
+      await clearEncryptedPassword()
     }
   }
 
