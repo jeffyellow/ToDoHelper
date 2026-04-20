@@ -5,7 +5,7 @@ mod sync;
 
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tauri::{command, generate_context, generate_handler, Builder, State, WebviewWindow};
+use tauri::{command, generate_context, generate_handler, Builder, Manager, State, WebviewWindow};
 use tokio::sync::Mutex;
 
 #[derive(Deserialize)]
@@ -273,17 +273,33 @@ fn set_main_mode(window: WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
+fn load_or_create_jwt_secret(app: &tauri::App) -> Result<String, String> {
+    let config_dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
+    let secret_path = config_dir.join("jwt_secret");
+    if secret_path.exists() {
+        std::fs::read_to_string(&secret_path).map_err(|e| e.to_string())
+    } else {
+        let secret = uuid::Uuid::new_v4().to_string();
+        std::fs::write(&secret_path, &secret).map_err(|e| e.to_string())?;
+        Ok(secret)
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let app_state = Arc::new(AppState {
-        mysql_pool: Mutex::new(None),
-        current_user: Mutex::new(None),
-        jwt_secret: uuid::Uuid::new_v4().to_string(),
-    });
-
     Builder::default()
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .manage(app_state)
+        .setup(|app| {
+            let jwt_secret = load_or_create_jwt_secret(app)?;
+            let app_state = Arc::new(AppState {
+                mysql_pool: Mutex::new(None),
+                current_user: Mutex::new(None),
+                jwt_secret,
+            });
+            app.manage(app_state);
+            Ok(())
+        })
         .invoke_handler(generate_handler![
             set_float_mode,
             set_main_mode,
