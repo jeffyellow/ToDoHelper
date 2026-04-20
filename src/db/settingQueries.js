@@ -44,3 +44,46 @@ export async function getMysqlConfig() {
     username: map.mysql_username || '',
   }
 }
+
+export async function saveEncryptedPassword(encrypted) {
+  const db = await getDb()
+  await db.execute(
+    "INSERT INTO app_settings (key, value) VALUES ('mysql_password_enc', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    [encrypted]
+  )
+}
+
+export async function getEncryptedPassword() {
+  const db = await getDb()
+  const rows = await db.select("SELECT value FROM app_settings WHERE key = 'mysql_password_enc'")
+  return rows[0]?.value ?? null
+}
+
+export async function saveAuthSession({ token, userId, username }) {
+  const db = await getDb()
+  await db.execute(
+    "INSERT INTO app_settings (key, value) VALUES ('auth_token', ?), ('auth_user_id', ?), ('auth_username', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    [token, String(userId), username]
+  )
+}
+
+export async function getAuthSession() {
+  const db = await getDb()
+  const rows = await db.select("SELECT key, value FROM app_settings WHERE key IN ('auth_token', 'auth_user_id', 'auth_username')")
+  const map = {}
+  for (const r of rows) {
+    map[r.key] = r.value
+  }
+  return {
+    token: map.auth_token || null,
+    userId: map.auth_user_id ? parseInt(map.auth_user_id, 10) : null,
+    username: map.auth_username || null,
+  }
+}
+
+export async function clearAuthSession() {
+  const db = await getDb()
+  await db.execute(
+    "DELETE FROM app_settings WHERE key IN ('auth_token', 'auth_user_id', 'auth_username')"
+  )
+}
