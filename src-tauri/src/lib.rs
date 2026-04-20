@@ -103,6 +103,7 @@ async fn ensure_mysql_schema(pool: &sqlx::MySqlPool) -> Result<(), String> {
             created_at VARCHAR(24),
             completed_at VARCHAR(24),
             updated_at VARCHAR(24) NOT NULL,
+            deleted TINYINT NOT NULL DEFAULT 0,
             UNIQUE KEY uk_user_uuid (user_id, local_uuid)
         )
         "#,
@@ -110,6 +111,11 @@ async fn ensure_mysql_schema(pool: &sqlx::MySqlPool) -> Result<(), String> {
     .execute(pool)
     .await
     .map_err(|e| e.to_string())?;
+
+    // 为已存在的表添加 deleted 列（忽略已存在的错误）
+    let _ = sqlx::query("ALTER TABLE tasks ADD COLUMN deleted TINYINT NOT NULL DEFAULT 0")
+        .execute(pool)
+        .await;
 
     // 忽略已存在索引的错误，保证幂等
     let _ = sqlx::query("CREATE INDEX idx_tasks_user_id ON tasks(user_id)")

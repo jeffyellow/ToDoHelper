@@ -3,7 +3,7 @@ import { generateUuid } from './uuid.js'
 
 export async function selectAllTasks() {
   const db = await getDb()
-  return db.select('SELECT * FROM tasks ORDER BY created_at DESC')
+  return db.select('SELECT * FROM tasks WHERE deleted = 0 OR deleted IS NULL ORDER BY created_at DESC')
 }
 
 export async function insertTask({ title, startDate, dueDate, priority, tag }) {
@@ -38,5 +38,9 @@ export async function updateTask(id, { title, completed, startDate, dueDate, pri
 
 export async function deleteTask(id) {
   const db = await getDb()
-  await db.execute('DELETE FROM tasks WHERE id = ?', [id])
+  const updatedAt = new Date().toISOString()
+  await db.execute(
+    "UPDATE tasks SET deleted = 1, updated_at = ?, sync_state = 'pending' WHERE id = ?",
+    [updatedAt, id]
+  )
 }

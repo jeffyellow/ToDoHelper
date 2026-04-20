@@ -2,7 +2,7 @@ import { getDb } from './init.js'
 
 export async function getPendingTasks() {
   const db = await getDb()
-  return db.select("SELECT id, local_uuid, title, completed, start_date, due_date, priority, tag, created_at, completed_at, updated_at FROM tasks WHERE sync_state = 'pending'")
+  return db.select("SELECT id, local_uuid, title, completed, start_date, due_date, priority, tag, created_at, completed_at, updated_at, deleted FROM tasks WHERE sync_state = 'pending'")
 }
 
 export async function markTasksSynced(ids) {
@@ -26,6 +26,11 @@ export async function setLastSyncAt(value) {
   )
 }
 
+export async function cleanupDeletedTasks() {
+  const db = await getDb()
+  await db.execute("DELETE FROM tasks WHERE deleted = 1 AND sync_state = 'synced'")
+}
+
 export async function upsertTaskByUuid(task) {
   const db = await getDb()
   const rows = await db.select('SELECT id FROM tasks WHERE local_uuid = ?', [task.local_uuid])
@@ -41,6 +46,7 @@ export async function upsertTaskByUuid(task) {
         created_at = ?,
         completed_at = ?,
         updated_at = ?,
+        deleted = 0,
         sync_state = 'synced'
        WHERE local_uuid = ?`,
       [
@@ -58,8 +64,8 @@ export async function upsertTaskByUuid(task) {
     )
   } else {
     await db.execute(
-      `INSERT INTO tasks (local_uuid, title, completed, start_date, due_date, priority, tag, created_at, completed_at, updated_at, sync_state)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')`,
+      `INSERT INTO tasks (local_uuid, title, completed, start_date, due_date, priority, tag, created_at, completed_at, updated_at, deleted, sync_state)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'synced')`,
       [
         task.local_uuid,
         task.title,

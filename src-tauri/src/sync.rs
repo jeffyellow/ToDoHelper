@@ -14,6 +14,7 @@ pub struct LocalTask {
     pub created_at: Option<String>,
     pub completed_at: Option<String>,
     pub updated_at: String,
+    pub deleted: i32,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -36,8 +37,8 @@ pub async fn push_tasks(pool: &MySqlPool, user_id: i32, tasks: &[LocalTask]) -> 
             r#"
             INSERT INTO tasks (
                 user_id, local_uuid, title, completed, start_date, due_date,
-                priority, tag, created_at, completed_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                priority, tag, created_at, completed_at, updated_at, deleted
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 title = IF(VALUES(updated_at) >= updated_at, VALUES(title), title),
                 completed = IF(VALUES(updated_at) >= updated_at, VALUES(completed), completed),
@@ -47,7 +48,8 @@ pub async fn push_tasks(pool: &MySqlPool, user_id: i32, tasks: &[LocalTask]) -> 
                 tag = IF(VALUES(updated_at) >= updated_at, VALUES(tag), tag),
                 created_at = IF(VALUES(updated_at) >= updated_at, VALUES(created_at), created_at),
                 completed_at = IF(VALUES(updated_at) >= updated_at, VALUES(completed_at), completed_at),
-                updated_at = IF(VALUES(updated_at) >= updated_at, VALUES(updated_at), updated_at)
+                updated_at = IF(VALUES(updated_at) >= updated_at, VALUES(updated_at), updated_at),
+                deleted = IF(VALUES(updated_at) >= updated_at, VALUES(deleted), deleted)
             "#
         )
         .bind(user_id)
@@ -61,6 +63,7 @@ pub async fn push_tasks(pool: &MySqlPool, user_id: i32, tasks: &[LocalTask]) -> 
         .bind(&task.created_at)
         .bind(&task.completed_at)
         .bind(&task.updated_at)
+        .bind(task.deleted as i8)
         .execute(pool)
         .await
         .map_err(|e| e.to_string())?;
@@ -76,7 +79,7 @@ pub async fn pull_tasks(
     let rows = if let Some(ts) = last_sync_at {
         sqlx::query(
             "SELECT local_uuid, title, completed, start_date, due_date, priority, tag, created_at, completed_at, updated_at
-             FROM tasks WHERE user_id = ? AND updated_at > ?"
+             FROM tasks WHERE user_id = ? AND deleted = 0 AND updated_at > ?"
         )
         .bind(user_id)
         .bind(ts)
@@ -85,7 +88,7 @@ pub async fn pull_tasks(
     } else {
         sqlx::query(
             "SELECT local_uuid, title, completed, start_date, due_date, priority, tag, created_at, completed_at, updated_at
-             FROM tasks WHERE user_id = ?"
+             FROM tasks WHERE user_id = ? AND deleted = 0"
         )
         .bind(user_id)
         .fetch_all(pool)

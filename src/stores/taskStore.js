@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { selectAllTasks, insertTask, updateTask, deleteTask } from '../db/taskQueries.js'
-import { getPendingTasks, markTasksSynced, getLastSyncAt, setLastSyncAt, upsertTaskByUuid } from '../db/syncQueries.js'
+import { getPendingTasks, markTasksSynced, getLastSyncAt, setLastSyncAt, upsertTaskByUuid, cleanupDeletedTasks } from '../db/syncQueries.js'
 import { hasMysqlConfig } from '../db/settingQueries.js'
 
 export const useTaskStore = defineStore('task', () => {
@@ -67,14 +67,15 @@ export const useTaskStore = defineStore('task', () => {
     try {
       const pending = await getPendingTasks()
       const lastSyncAt = await getLastSyncAt()
-      const result = await invoke('sync_tasks', { pendingTasks: pending, lastSyncAt })
+      const result = await invoke('sync_tasks', { payload: { pendingTasks: pending, lastSyncAt } })
       for (const task of result.pulled_tasks) {
         await upsertTaskByUuid(task)
       }
       if (pending.length > 0) {
         await markTasksSynced(pending.map((t) => t.id))
       }
-      if (result.pulled_tasks.length > 0) {
+      await cleanupDeletedTasks()
+      if (result.pulled_tasks.length > 0 || pending.length > 0) {
         await loadTasks()
       }
       await setLastSyncAt(result.new_last_sync_at)

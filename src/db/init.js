@@ -32,10 +32,14 @@ export async function initDb() {
     await database.execute('ALTER TABLE tasks ADD COLUMN start_date TEXT')
   }
   if (!colNames.includes('updated_at')) {
-    await database.execute("ALTER TABLE tasks ADD COLUMN updated_at TEXT DEFAULT (datetime('now'))")
+    await database.execute("ALTER TABLE tasks ADD COLUMN updated_at TEXT")
+    await database.execute("UPDATE tasks SET updated_at = datetime('now') WHERE updated_at IS NULL")
   }
   if (!colNames.includes('sync_state')) {
     await database.execute("ALTER TABLE tasks ADD COLUMN sync_state TEXT DEFAULT 'synced'")
+  }
+  if (!colNames.includes('deleted')) {
+    await database.execute('ALTER TABLE tasks ADD COLUMN deleted INTEGER DEFAULT 0')
   }
   if (!colNames.includes('local_uuid')) {
     await database.execute('ALTER TABLE tasks ADD COLUMN local_uuid TEXT')

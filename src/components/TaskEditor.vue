@@ -46,7 +46,7 @@ async function save() {
     emit('close')
   } catch (e) {
     console.error('Save task failed:', e)
-    alert('保存失败：' + e.message)
+    alert('保存失败：' + (e?.message || String(e)))
   }
 }
 
