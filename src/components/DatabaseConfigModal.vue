@@ -1,13 +1,16 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
-import { saveMysqlConfig, getMysqlConfig } from '../db/settingQueries.js'
+import { saveMysqlConfig, getMysqlConfig, saveEncryptedPassword } from '../db/settingQueries.js'
+import { useSettingStore } from '../stores/settingStore.js'
 
 const props = defineProps({ open: Boolean })
-const emit = defineEmits(['close', 'connected'])
+const emit = defineEmits(['close'])
 
-const step = ref('connection')
+const settingStore = useSettingStore()
+
 const isLoading = ref(false)
+const testResult = ref('')
 const error = ref('')
 
 const host = ref('')
@@ -16,30 +19,23 @@ const database = ref('')
 const mysqlUsername = ref('')
 const mysqlPassword = ref('')
 
-const authTab = ref('login')
-const appUsername = ref('')
-const appPassword = ref('')
-const confirmPassword = ref('')
-
 watch(() => props.open, async (open) => {
   if (open) {
     error.value = ''
-    step.value = 'connection'
+    testResult.value = ''
     const cfg = await getMysqlConfig()
     host.value = cfg.host
     port.value = cfg.port
     database.value = cfg.database
     mysqlUsername.value = cfg.username
     mysqlPassword.value = ''
-    appUsername.value = ''
-    appPassword.value = ''
-    confirmPassword.value = ''
   }
 })
 
 async function testConnection() {
   isLoading.value = true
   error.value = ''
+  testResult.value = ''
   try {
     await invoke('test_mysql_connection', {
       config: {
@@ -50,58 +46,35 @@ async function testConnection() {
         password: mysqlPassword.value,
       }
     })
-    step.value = 'auth'
+    testResult.value = '连接成功'
   } catch (e) {
-    error.value = '无法连接到数据库：' + (e?.message || e)
+    error.value = '连接失败：' + (e?.message || String(e))
   } finally {
     isLoading.value = false
   }
 }
 
-async function handleAuth() {
+async function saveConfig() {
   isLoading.value = true
   error.value = ''
   try {
-    const config = {
-      host: host.value,
-      port: port.value,
-      database: database.value,
-      username: mysqlUsername.value,
-      password: mysqlPassword.value,
-    }
-    if (authTab.value === 'register') {
-      if (appPassword.value !== confirmPassword.value) {
-        error.value = '两次输入的密码不一致'
-        isLoading.value = false
-        return
-      }
-      await invoke('register_user', {
-        payload: {
-          config,
-          appUsername: appUsername.value,
-          appPassword: appPassword.value,
-        }
-      })
-    } else {
-      await invoke('login_user', {
-        payload: {
-          config,
-          appUsername: appUsername.value,
-          appPassword: appPassword.value,
-        }
-      })
-    }
     await saveMysqlConfig({
       host: host.value,
       port: port.value,
       database: database.value,
       username: mysqlUsername.value,
     })
-    emit('connected')
+    if (mysqlPassword.value) {
+      const encrypted = await invoke('encrypt_password', { password: mysqlPassword.value })
+      await saveEncryptedPassword(encrypted)
+    }
+    testResult.value = '配置已保存'
+    if (settingStore.isLoggedIn) {
+      await settingStore.restoreSession()
+    }
     emit('close')
   } catch (e) {
-    const prefix = authTab.value === 'register' ? '注册失败：' : '登录失败：'
-    error.value = prefix + (e?.message || e)
+    error.value = '保存失败：' + (e?.message || String(e))
   } finally {
     isLoading.value = false
   }
@@ -115,9 +88,9 @@ function onBackdrop(e) {
 <template>
   <div v-if="open" class="modal-backdrop" @click="onBackdrop">
     <div class="modal">
-      <h3 class="modal-title">数据库连接</h3>
+      <h3 class="modal-title">数据库连接配置</h3>
 
-      <div v-if="step === 'connection'" class="form">
+      <div class="form">
         <label>
           主机地址
           <input v-model="host" type="text" placeholder="例如：localhost" />
@@ -136,39 +109,17 @@ function onBackdrop(e) {
         </label>
         <label>
           MySQL 密码
-          <input v-model="mysqlPassword" type="password" />
+          <input v-model="mysqlPassword" type="password" placeholder="输入密码以保存" />
         </label>
+        <p v-if="testResult" class="success">{{ testResult }}</p>
         <p v-if="error" class="error">{{ error }}</p>
         <div class="modal-actions">
-          <button class="btn-secondary" @click="$emit('close')">取消</button>
-          <button class="btn-primary" :disabled="isLoading || !host.trim() || !database.trim() || !mysqlUsername.trim()" @click="testConnection">
-            {{ isLoading ? '连接中...' : '测试连接' }}
+          <button class="btn-secondary" @click="$emit('close')">关闭</button>
+          <button class="btn-secondary" :disabled="isLoading" @click="testConnection">
+            {{ isLoading ? '测试中...' : '测试连接' }}
           </button>
-        </div>
-      </div>
-
-      <div v-else class="form">
-        <div class="tabs">
-          <button :class="{ active: authTab === 'login' }" @click="authTab = 'login'">登录</button>
-          <button :class="{ active: authTab === 'register' }" @click="authTab = 'register'">注册</button>
-        </div>
-        <label>
-          用户名
-          <input v-model="appUsername" type="text" />
-        </label>
-        <label>
-          密码
-          <input v-model="appPassword" type="password" />
-        </label>
-        <label v-if="authTab === 'register'">
-          确认密码
-          <input v-model="confirmPassword" type="password" />
-        </label>
-        <p v-if="error" class="error">{{ error }}</p>
-        <div class="modal-actions">
-          <button class="btn-secondary" @click="step = 'connection'">上一步</button>
-          <button class="btn-primary" :disabled="isLoading || !appUsername.trim() || !appPassword.trim()" @click="handleAuth">
-            {{ isLoading ? '处理中...' : (authTab === 'register' ? '注册' : '登录') }}
+          <button class="btn-primary" :disabled="isLoading || !host.trim() || !database.trim() || !mysqlUsername.trim()" @click="saveConfig">
+            保存
           </button>
         </div>
       </div>
@@ -225,24 +176,10 @@ function onBackdrop(e) {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px rgba(251, 146, 60, 0.2);
 }
-.tabs {
-  display: flex;
-  gap: 8px;
-}
-.tabs button {
-  flex: 1;
-  height: 36px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-primary);
-  cursor: pointer;
-  font-size: 14px;
-}
-.tabs button.active {
-  background: var(--color-primary-subtle);
-  color: var(--color-primary-hover);
-  border-color: transparent;
+.success {
+  color: #22c55e;
+  font-size: 13px;
+  margin: 0;
 }
 .error {
   color: #ef4444;
