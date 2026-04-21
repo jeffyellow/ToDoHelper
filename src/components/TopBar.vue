@@ -1,12 +1,12 @@
 <script setup>
-import { Search, PictureInPicture, Database } from 'lucide-vue-next'
+import { Search, PictureInPicture, Database, Bell } from 'lucide-vue-next'
 import ThemeToggle from './ThemeToggle.vue'
 import SyncStatus from './SyncStatus.vue'
 import { useTaskStore } from '../stores/taskStore.js'
 
 const taskStore = useTaskStore()
 defineProps({ searchQuery: String })
-const emit = defineEmits(['enterFloat', 'update:searchQuery', 'openDbConfig'])
+const emit = defineEmits(['enterFloat', 'update:searchQuery', 'openDbConfig', 'openWebhookConfig'])
 </script>
 
 <template>
@@ -23,6 +23,9 @@ const emit = defineEmits(['enterFloat', 'update:searchQuery', 'openDbConfig'])
     <div class="actions">
       <SyncStatus :status="taskStore.syncStatus" />
       <ThemeToggle />
+      <button class="icon-btn" @click="emit('openWebhookConfig')" title="钉钉推送设置">
+        <Bell :size="20" />
+      </button>
       <button class="icon-btn" @click="emit('openDbConfig')" title="数据库连接">
         <Database :size="20" />
       </button>
