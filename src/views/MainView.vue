@@ -7,7 +7,7 @@ import TaskList from '../components/TaskList.vue'
 import TaskEditor from '../components/TaskEditor.vue'
 
 const taskStore = useTaskStore()
-const emit = defineEmits(['enterFloat', 'openDbConfig', 'openAuth'])
+const emit = defineEmits(['enterFloat', 'openDbConfig', 'openAuth', 'openWebhookConfig'])
 const editorOpen = ref(false)
 const editingTask = ref(null)
 
@@ -35,6 +35,7 @@ function closeEditor() {
         @update:search-query="taskStore.setSearchQuery"
         @enter-float="emit('enterFloat')"
         @open-db-config="emit('openDbConfig')"
+        @open-webhook-config="emit('openWebhookConfig')"
       />
       <div class="page-body">
         <TaskList @edit-task="openEditor" />
