@@ -95,6 +95,20 @@ export const useSettingStore = defineStore('setting', () => {
     await setSetting('floatAlwaysOnTop', String(value))
   }
 
+  async function getWebhookConfig() {
+    return {
+      url: await getSetting('dingtalk_webhook_url'),
+      times: await getSetting('dingtalk_push_times'),
+      enabled: (await getSetting('dingtalk_enabled')) !== 'false',
+    }
+  }
+
+  async function saveWebhookConfig({ url, times, enabled }) {
+    await setSetting('dingtalk_webhook_url', url)
+    await setSetting('dingtalk_push_times', times)
+    await setSetting('dingtalk_enabled', String(enabled))
+  }
+
   return {
     theme,
     floatOpacity,
@@ -109,5 +123,7 @@ export const useSettingStore = defineStore('setting', () => {
     toggleTheme,
     setFloatOpacity,
     setFloatAlwaysOnTop,
+    getWebhookConfig,
+    saveWebhookConfig,
   }
 })
