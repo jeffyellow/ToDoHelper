@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, onBeforeUnmount, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import MainView from './views/MainView.vue'
 import FloatView from './views/FloatView.vue'
@@ -17,6 +17,14 @@ const taskStore = useTaskStore()
 const showDbConfig = ref(false)
 const showAuth = ref(false)
 const showWebhookConfig = ref(false)
+const showDbConfigBtn = ref(false)
+
+function onKeydown(e) {
+  if (e.shiftKey && e.ctrlKey && e.key === 'F12') {
+    e.preventDefault()
+    showDbConfigBtn.value = !showDbConfigBtn.value
+  }
+}
 
 onMounted(async () => {
   try {
@@ -50,10 +58,16 @@ onMounted(async () => {
     const CHECK_INTERVAL = 60_000 // 每分钟检查一次
     const timer = setInterval(checkPush, CHECK_INTERVAL)
     checkPush() // 立即检查一次
+
+    window.addEventListener('keydown', onKeydown)
   } catch (e) {
     console.error('App initialization failed:', e)
     alert('初始化失败：' + (e?.message || String(e)))
   }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
 })
 
 async function enterFloat() {
@@ -168,6 +182,7 @@ async function checkPush() {
 <template>
   <MainView
     v-if="!settingStore.isFloat"
+    :show-db-config-btn="showDbConfigBtn"
     @enter-float="enterFloat"
     @open-db-config="showDbConfig = true"
     @open-auth="showAuth = true"
