@@ -66,7 +66,9 @@ onMounted(async () => {
       if (userId) {
         await taskStore.assignAnonymousTasks(userId)
       }
-      await taskStore.loadTasks()
+    }
+    await taskStore.loadTasks()
+    if (settingStore.isLoggedIn) {
       taskStore.triggerSync().catch(console.error)
     }
 
