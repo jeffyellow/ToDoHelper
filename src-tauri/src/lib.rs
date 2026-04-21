@@ -290,6 +290,7 @@ fn load_or_create_jwt_secret(app: &tauri::App) -> Result<String, String> {
 pub fn run() {
     Builder::default()
         .plugin(tauri_plugin_sql::Builder::default().build())
+        .plugin(tauri_plugin_http::init())
         .setup(|app| {
             let jwt_secret = load_or_create_jwt_secret(app)?;
             let app_state = Arc::new(AppState {

@@ -1,6 +1,7 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { useSettingStore } from '../stores/settingStore.js'
+import { postJson } from '../utils/http.js'
 import { Bell, X, Plus } from 'lucide-vue-next'
 
 const props = defineProps({ open: Boolean })
@@ -56,17 +57,12 @@ async function testPush() {
   error.value = ''
   testResult.value = ''
   try {
-    const resp = await fetch(url.value.trim(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        msgtype: 'markdown',
-        markdown: {
-          title: '任务提醒测试',
-          text: '## 🔔 测试推送\n\n这是一条测试消息，如果收到说明 Webhook 配置正确。',
-        },
-      }),
-      signal: AbortSignal.timeout(5000),
+    const resp = await postJson(url.value.trim(), {
+      msgtype: 'markdown',
+      markdown: {
+        title: '任务提醒测试',
+        text: '## 🔔 测试推送\n\n这是一条测试消息，如果收到说明 Webhook 配置正确。',
+      },
     })
     if (resp.ok) {
       testResult.value = '测试推送成功'

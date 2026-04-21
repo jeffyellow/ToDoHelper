@@ -10,6 +10,7 @@ import { useSettingStore } from './stores/settingStore.js'
 import { useTaskStore } from './stores/taskStore.js'
 import { initDb } from './db/init.js'
 import { getSetting, setSetting } from './db/settingQueries.js'
+import { postJson } from './utils/http.js'
 
 const settingStore = useSettingStore()
 const taskStore = useTaskStore()
@@ -109,15 +110,13 @@ function formatMarkdown({ active, upcoming }) {
 
 async function sendDingTalk(url, payload) {
   const markdownText = formatMarkdown(payload)
-  await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      msgtype: 'markdown',
-      markdown: { title: '任务提醒', text: markdownText },
-    }),
-    signal: AbortSignal.timeout(5000),
+  const resp = await postJson(url, {
+    msgtype: 'markdown',
+    markdown: { title: '任务提醒', text: markdownText },
   })
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}`)
+  }
 }
 
 async function checkPush() {

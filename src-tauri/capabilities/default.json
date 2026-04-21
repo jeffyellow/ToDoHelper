@@ -9,6 +9,7 @@
     "sql:allow-load",
     "sql:allow-execute",
     "sql:allow-select",
-    "core:window:allow-set-always-on-top"
+    "core:window:allow-set-always-on-top",
+    "http:default"
   ]
 }
