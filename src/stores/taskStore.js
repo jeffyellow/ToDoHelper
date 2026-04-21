@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
-import { selectAllTasks, insertTask, updateTask, deleteTask } from '../db/taskQueries.js'
+import { selectAllTasks, insertTask, updateTask, deleteTask, assignUserIdToNullTasks } from '../db/taskQueries.js'
 import { getPendingTasks, markTasksSynced, getLastSyncAt, setLastSyncAt, upsertTaskByUuid, cleanupDeletedTasks } from '../db/syncQueries.js'
 import { hasMysqlConfig } from '../db/settingQueries.js'
 import { useSettingStore } from './settingStore.js'
@@ -101,23 +101,18 @@ export const useTaskStore = defineStore('task', () => {
 
   async function addTask({ title, startDate, dueDate, priority = 1, tag }) {
     const userId = getUserId()
-    if (!userId) throw new Error('请先登录')
     await insertTask({ title, startDate, dueDate, priority, tag, userId })
     await loadTasks()
     triggerSync().catch(console.error)
   }
 
   async function updateTaskById(id, payload) {
-    const userId = getUserId()
-    if (!userId) throw new Error('请先登录')
     await updateTask(id, payload)
     await loadTasks()
     triggerSync().catch(console.error)
   }
 
   async function toggleComplete(id) {
-    const userId = getUserId()
-    if (!userId) throw new Error('请先登录')
     const task = tasks.value.find((t) => t.id === id)
     if (!task) return
     const completed = task.completed ? 0 : 1
@@ -128,11 +123,13 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   async function removeTask(id) {
-    const userId = getUserId()
-    if (!userId) throw new Error('请先登录')
     await deleteTask(id)
     await loadTasks()
     triggerSync().catch(console.error)
+  }
+
+  async function assignAnonymousTasks(userId) {
+    await assignUserIdToNullTasks(userId)
   }
 
   function setFilterTag(tag) {
@@ -167,5 +164,6 @@ export const useTaskStore = defineStore('task', () => {
     setFilterTag,
     setSearchQuery,
     setActiveFilter,
+    assignAnonymousTasks,
   }
 })

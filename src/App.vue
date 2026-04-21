@@ -26,9 +26,13 @@ function onKeydown(e) {
   }
 }
 
-watch(() => settingStore.isLoggedIn, (isLoggedIn) => {
+watch(() => settingStore.isLoggedIn, async (isLoggedIn) => {
   if (isLoggedIn) {
-    taskStore.loadTasks()
+    const userId = settingStore.currentUser?.userId
+    if (userId) {
+      await taskStore.assignAnonymousTasks(userId)
+    }
+    await taskStore.loadTasks()
   } else {
     taskStore.tasks = []
   }
@@ -58,6 +62,10 @@ onMounted(async () => {
 
     await settingStore.restoreSession()
     if (settingStore.isLoggedIn) {
+      const userId = settingStore.currentUser?.userId
+      if (userId) {
+        await taskStore.assignAnonymousTasks(userId)
+      }
       await taskStore.loadTasks()
       taskStore.triggerSync().catch(console.error)
     }

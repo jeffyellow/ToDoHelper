@@ -3,8 +3,19 @@ import { generateUuid } from './uuid.js'
 
 export async function selectAllTasks(userId) {
   const db = await getDb()
-  if (!userId) return []
-  return db.select('SELECT * FROM tasks WHERE user_id = ? AND (deleted = 0 OR deleted IS NULL) ORDER BY created_at DESC', [userId])
+  if (userId) {
+    return db.select('SELECT * FROM tasks WHERE user_id = ? AND (deleted = 0 OR deleted IS NULL) ORDER BY created_at DESC', [userId])
+  }
+  return db.select("SELECT * FROM tasks WHERE user_id IS NULL AND (deleted = 0 OR deleted IS NULL) ORDER BY created_at DESC")
+}
+
+export async function assignUserIdToNullTasks(userId) {
+  const db = await getDb()
+  if (!userId) return
+  await db.execute(
+    "UPDATE tasks SET user_id = ?, sync_state = 'pending' WHERE user_id IS NULL",
+    [userId]
+  )
 }
 
 export async function insertTask({ title, startDate, dueDate, priority, tag, userId }) {
