@@ -19,6 +19,7 @@ export const useSettingStore = defineStore('setting', () => {
   const isFloat = ref(false)
   const isLoggedIn = ref(false)
   const currentUser = ref(null)
+  const lastUserId = ref(null)
 
   async function init() {
     const savedTheme = await getSetting('theme')
@@ -55,7 +56,8 @@ export const useSettingStore = defineStore('setting', () => {
         },
       })
       isLoggedIn.value = true
-      currentUser.value = auth.username
+      currentUser.value = { userId: auth.userId, username: auth.username }
+      lastUserId.value = auth.userId
     } catch (e) {
       console.error('Session restore failed:', e)
       isLoggedIn.value = false
@@ -70,10 +72,14 @@ export const useSettingStore = defineStore('setting', () => {
     const encrypted = await invoke('encrypt_password', { password })
     await saveEncryptedPassword(encrypted)
     isLoggedIn.value = true
-    currentUser.value = username
+    currentUser.value = { userId, username }
+    lastUserId.value = userId
   }
 
   async function logout() {
+    if (currentUser.value?.userId) {
+      lastUserId.value = currentUser.value.userId
+    }
     await clearAuthSession()
     isLoggedIn.value = false
     currentUser.value = null

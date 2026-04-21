@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
+import { ref } from 'vue'
 import { useTaskStore } from '../taskStore.js'
 
 vi.mock('../../db/taskQueries.js', () => ({
@@ -15,6 +16,7 @@ vi.mock('../../db/syncQueries.js', () => ({
   getLastSyncAt: vi.fn(),
   setLastSyncAt: vi.fn(),
   upsertTaskByUuid: vi.fn(),
+  cleanupDeletedTasks: vi.fn(),
 }))
 
 vi.mock('../../db/settingQueries.js', () => ({
@@ -23,6 +25,14 @@ vi.mock('../../db/settingQueries.js', () => ({
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
+}))
+
+vi.mock('../settingStore.js', () => ({
+  useSettingStore: vi.fn(() => ({
+    currentUser: { userId: 1, username: 'test' },
+    isLoggedIn: true,
+    lastUserId: null,
+  })),
 }))
 
 import { selectAllTasks, insertTask, updateTask, deleteTask } from '../../db/taskQueries.js'
@@ -57,7 +67,7 @@ describe('taskStore', () => {
     selectAllTasks.mockResolvedValue([{ id: 3, title: 'New', completed: 0 }])
     const store = useTaskStore()
     await store.addTask({ title: 'New' })
-    expect(insertTask).toHaveBeenCalledWith({ title: 'New', startDate: undefined, dueDate: undefined, priority: 1, tag: undefined })
+    expect(insertTask).toHaveBeenCalledWith({ title: 'New', startDate: undefined, dueDate: undefined, priority: 1, tag: undefined, userId: 1 })
     expect(store.tasks[0].title).toBe('New')
   })
 

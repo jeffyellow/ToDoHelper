@@ -1,18 +1,19 @@
 import { getDb } from './init.js'
 import { generateUuid } from './uuid.js'
 
-export async function selectAllTasks() {
+export async function selectAllTasks(userId) {
   const db = await getDb()
-  return db.select('SELECT * FROM tasks WHERE deleted = 0 OR deleted IS NULL ORDER BY created_at DESC')
+  if (!userId) return []
+  return db.select('SELECT * FROM tasks WHERE user_id = ? AND (deleted = 0 OR deleted IS NULL) ORDER BY created_at DESC', [userId])
 }
 
-export async function insertTask({ title, startDate, dueDate, priority, tag }) {
+export async function insertTask({ title, startDate, dueDate, priority, tag, userId }) {
   const db = await getDb()
   const localUuid = generateUuid()
   const updatedAt = new Date().toISOString()
   const result = await db.execute(
-    'INSERT INTO tasks (title, start_date, due_date, priority, tag, local_uuid, updated_at, sync_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [title, startDate ?? null, dueDate ?? null, priority ?? 1, tag ?? null, localUuid, updatedAt, 'pending']
+    'INSERT INTO tasks (title, start_date, due_date, priority, tag, local_uuid, updated_at, sync_state, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [title, startDate ?? null, dueDate ?? null, priority ?? 1, tag ?? null, localUuid, updatedAt, 'pending', userId]
   )
   return result.lastInsertId
 }

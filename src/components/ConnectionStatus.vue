@@ -49,7 +49,7 @@ async function onLogout() {
       <LogIn v-if="!settingStore.isLoggedIn" :size="14" />
       <LogOut v-else :size="14" />
       <span>
-        {{ settingStore.isLoggedIn ? settingStore.currentUser : '未登录' }}
+        {{ settingStore.isLoggedIn ? settingStore.currentUser?.username : '未登录' }}
       </span>
     </button>
   </div>

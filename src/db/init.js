@@ -44,6 +44,9 @@ export async function initDb() {
   if (!colNames.includes('local_uuid')) {
     await database.execute('ALTER TABLE tasks ADD COLUMN local_uuid TEXT')
   }
+  if (!colNames.includes('user_id')) {
+    await database.execute('ALTER TABLE tasks ADD COLUMN user_id INTEGER')
+  }
 
   const tasksWithoutUuid = await database.select('SELECT id FROM tasks WHERE local_uuid IS NULL')
   for (const task of tasksWithoutUuid) {

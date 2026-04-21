@@ -4,8 +4,10 @@ import { invoke } from '@tauri-apps/api/core'
 import { selectAllTasks, insertTask, updateTask, deleteTask } from '../db/taskQueries.js'
 import { getPendingTasks, markTasksSynced, getLastSyncAt, setLastSyncAt, upsertTaskByUuid, cleanupDeletedTasks } from '../db/syncQueries.js'
 import { hasMysqlConfig } from '../db/settingQueries.js'
+import { useSettingStore } from './settingStore.js'
 
 export const useTaskStore = defineStore('task', () => {
+  const settingStore = useSettingStore()
   const tasks = ref([])
   const filterTag = ref('')
   const searchQuery = ref('')
@@ -55,30 +57,36 @@ export const useTaskStore = defineStore('task', () => {
     return Array.from(set)
   })
 
+  function getUserId() {
+    return settingStore.currentUser?.userId || settingStore.lastUserId
+  }
+
   async function loadTasks() {
-    tasks.value = await selectAllTasks()
+    tasks.value = await selectAllTasks(getUserId())
   }
 
   async function triggerSync() {
     if (syncStatus.value === 'syncing') return
+    const userId = settingStore.currentUser?.userId
+    if (!userId) return
     const hasConfig = await hasMysqlConfig()
     if (!hasConfig) return
     syncStatus.value = 'syncing'
     try {
-      const pending = await getPendingTasks()
-      const lastSyncAt = await getLastSyncAt()
+      const pending = await getPendingTasks(userId)
+      const lastSyncAt = await getLastSyncAt(userId)
       const result = await invoke('sync_tasks', { payload: { pendingTasks: pending, lastSyncAt } })
       for (const task of result.pulled_tasks) {
-        await upsertTaskByUuid(task)
+        await upsertTaskByUuid(task, userId)
       }
       if (pending.length > 0) {
         await markTasksSynced(pending.map((t) => t.id))
       }
-      await cleanupDeletedTasks()
+      await cleanupDeletedTasks(userId)
       if (result.pulled_tasks.length > 0 || pending.length > 0) {
         await loadTasks()
       }
-      await setLastSyncAt(result.new_last_sync_at)
+      await setLastSyncAt(result.new_last_sync_at, userId)
       syncStatus.value = 'idle'
     } catch (e) {
       console.error('Sync failed:', e)
@@ -92,18 +100,24 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   async function addTask({ title, startDate, dueDate, priority = 1, tag }) {
-    await insertTask({ title, startDate, dueDate, priority, tag })
+    const userId = getUserId()
+    if (!userId) throw new Error('请先登录')
+    await insertTask({ title, startDate, dueDate, priority, tag, userId })
     await loadTasks()
     triggerSync().catch(console.error)
   }
 
   async function updateTaskById(id, payload) {
+    const userId = getUserId()
+    if (!userId) throw new Error('请先登录')
     await updateTask(id, payload)
     await loadTasks()
     triggerSync().catch(console.error)
   }
 
   async function toggleComplete(id) {
+    const userId = getUserId()
+    if (!userId) throw new Error('请先登录')
     const task = tasks.value.find((t) => t.id === id)
     if (!task) return
     const completed = task.completed ? 0 : 1
@@ -114,6 +128,8 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   async function removeTask(id) {
+    const userId = getUserId()
+    if (!userId) throw new Error('请先登录')
     await deleteTask(id)
     await loadTasks()
     triggerSync().catch(console.error)

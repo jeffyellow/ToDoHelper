@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onBeforeUnmount, ref } from 'vue'
+import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import MainView from './views/MainView.vue'
 import FloatView from './views/FloatView.vue'
@@ -26,11 +26,18 @@ function onKeydown(e) {
   }
 }
 
+watch(() => settingStore.isLoggedIn, (isLoggedIn) => {
+  if (isLoggedIn) {
+    taskStore.loadTasks()
+  } else {
+    taskStore.tasks = []
+  }
+})
+
 onMounted(async () => {
   try {
     await initDb()
     await settingStore.init()
-    await taskStore.loadTasks()
 
     // 首次启动自动写入默认 MySQL 配置
     try {
@@ -51,6 +58,7 @@ onMounted(async () => {
 
     await settingStore.restoreSession()
     if (settingStore.isLoggedIn) {
+      await taskStore.loadTasks()
       taskStore.triggerSync().catch(console.error)
     }
 
