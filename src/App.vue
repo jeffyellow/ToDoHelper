@@ -9,7 +9,7 @@ import WebhookConfigModal from './components/WebhookConfigModal.vue'
 import { useSettingStore } from './stores/settingStore.js'
 import { useTaskStore } from './stores/taskStore.js'
 import { initDb } from './db/init.js'
-import { getSetting, setSetting } from './db/settingQueries.js'
+import { getSetting, setSetting, hasMysqlConfig, saveMysqlConfig, saveEncryptedPassword } from './db/settingQueries.js'
 import { postJson } from './utils/http.js'
 
 const settingStore = useSettingStore()
@@ -23,6 +23,20 @@ onMounted(async () => {
     await initDb()
     await settingStore.init()
     await taskStore.loadTasks()
+
+    // 首次启动自动写入默认 MySQL 配置
+    const hasConfig = await hasMysqlConfig()
+    if (!hasConfig) {
+      await saveMysqlConfig({
+        host: '47.100.164.234',
+        port: 3306,
+        database: 'todohelper',
+        username: 'root',
+      })
+      const encrypted = await invoke('encrypt_password', { password: 'hjf@19941121' })
+      await saveEncryptedPassword(encrypted)
+    }
+
     await settingStore.restoreSession()
     if (settingStore.isLoggedIn) {
       taskStore.triggerSync().catch(console.error)
