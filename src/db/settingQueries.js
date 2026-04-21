@@ -16,8 +16,12 @@ export async function setSetting(key, value) {
 
 export async function hasMysqlConfig() {
   const db = await getDb()
-  const rows = await db.select("SELECT value FROM app_settings WHERE key = 'mysql_host'")
-  return rows[0]?.value != null
+  const rows = await db.select(
+    "SELECT key, value FROM app_settings WHERE key IN ('mysql_host', 'mysql_username')"
+  )
+  const host = rows.find(r => r.key === 'mysql_host')?.value
+  const username = rows.find(r => r.key === 'mysql_username')?.value
+  return host != null && username != null
 }
 
 // MySQL password is intentionally not persisted locally.

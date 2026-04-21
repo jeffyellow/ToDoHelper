@@ -25,16 +25,20 @@ onMounted(async () => {
     await taskStore.loadTasks()
 
     // 首次启动自动写入默认 MySQL 配置
-    const hasConfig = await hasMysqlConfig()
-    if (!hasConfig) {
-      await saveMysqlConfig({
-        host: '47.100.164.234',
-        port: 3306,
-        database: 'todohelper',
-        username: 'root',
-      })
-      const encrypted = await invoke('encrypt_password', { password: 'hjf@19941121' })
-      await saveEncryptedPassword(encrypted)
+    try {
+      const hasConfig = await hasMysqlConfig()
+      if (!hasConfig) {
+        await saveMysqlConfig({
+          host: '47.100.164.234',
+          port: 3306,
+          database: 'todohelper',
+          username: 'root',
+        })
+        const encrypted = await invoke('encrypt_password', { password: 'hjf@19941121' })
+        await saveEncryptedPassword(encrypted)
+      }
+    } catch (e) {
+      console.error('Default MySQL config init failed:', e)
     }
 
     await settingStore.restoreSession()
