@@ -5,7 +5,7 @@ import SyncStatus from './SyncStatus.vue'
 import { useTaskStore } from '../stores/taskStore.js'
 
 const taskStore = useTaskStore()
-defineProps({ searchQuery: String })
+defineProps({ searchQuery: String, showDbConfigBtn: Boolean })
 const emit = defineEmits(['enterFloat', 'update:searchQuery', 'openDbConfig', 'openWebhookConfig'])
 </script>
 
@@ -26,7 +26,12 @@ const emit = defineEmits(['enterFloat', 'update:searchQuery', 'openDbConfig', 'o
       <button class="icon-btn" @click="emit('openWebhookConfig')" title="钉钉推送设置">
         <Bell :size="20" />
       </button>
-      <button class="icon-btn" @click="emit('openDbConfig')" title="数据库连接">
+      <button
+        v-if="showDbConfigBtn"
+        class="icon-btn"
+        @click="emit('openDbConfig')"
+        title="数据库连接"
+      >
         <Database :size="20" />
       </button>
       <button class="icon-btn" @click="emit('enterFloat')" title="悬浮窗">
