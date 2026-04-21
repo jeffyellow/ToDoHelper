@@ -8,6 +8,7 @@ import TaskEditor from '../components/TaskEditor.vue'
 
 const taskStore = useTaskStore()
 const emit = defineEmits(['enterFloat', 'openDbConfig', 'openAuth', 'openWebhookConfig'])
+const props = defineProps({ showDbConfigBtn: Boolean })
 const editorOpen = ref(false)
 const editingTask = ref(null)
 
@@ -32,6 +33,7 @@ function closeEditor() {
     <div class="content">
       <TopBar
         :search-query="taskStore.searchQuery"
+        :show-db-config-btn="props.showDbConfigBtn"
         @update:search-query="taskStore.setSearchQuery"
         @enter-float="emit('enterFloat')"
         @open-db-config="emit('openDbConfig')"
