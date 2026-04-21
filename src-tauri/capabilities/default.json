@@ -10,6 +10,9 @@
     "sql:allow-execute",
     "sql:allow-select",
     "core:window:allow-set-always-on-top",
-    "http:default"
+    {
+      "identifier": "http:default",
+      "allow": ["https://oapi.dingtalk.com/*"]
+    }
   ]
 }
