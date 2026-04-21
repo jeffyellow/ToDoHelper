@@ -58,7 +58,7 @@ export const useTaskStore = defineStore('task', () => {
   })
 
   function getUserId() {
-    return settingStore.currentUser?.userId || settingStore.lastUserId
+    return settingStore.currentUser?.userId ?? null
   }
 
   async function loadTasks() {
