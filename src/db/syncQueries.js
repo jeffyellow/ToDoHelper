@@ -51,7 +51,8 @@ export async function upsertTaskByUuid(task, userId) {
         completed_at = ?,
         updated_at = ?,
         deleted = 0,
-        sync_state = 'synced'
+        sync_state = 'synced',
+        user_id = ?
        WHERE local_uuid = ?`,
       [
         task.title,
@@ -63,6 +64,7 @@ export async function upsertTaskByUuid(task, userId) {
         task.created_at ?? null,
         task.completed_at ?? null,
         task.updated_at,
+        userId,
         task.local_uuid,
       ]
     )
