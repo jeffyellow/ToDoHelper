@@ -125,7 +125,7 @@ function buildPushPayload() {
     .sort((a, b) => b.priority - a.priority)
 
   const upcoming = taskStore.tasks
-    .filter(t => !t.completed && t.start_date && t.start_date >= today && t.start_date <= cutoffStr)
+    .filter(t => !t.completed && t.start_date && t.start_date > today && t.start_date <= cutoffStr)
     .sort((a, b) => a.start_date.localeCompare(b.start_date))
 
   return { active, upcoming }
@@ -139,9 +139,10 @@ function formatMarkdown({ active, upcoming }) {
     text += '> 暂无正在执行的任务\n'
   } else {
     for (const t of active) {
-      const priorityLabel = t.priority === 1 ? '**高优**' : (t.priority === 2 ? '中优' : '低优')
+      const priorityMap = { 2: '高', 1: '中', 0: '低' }
+      const p = priorityMap[t.priority] ?? '低'
       const due = t.due_date ? `（截止：${t.due_date}）` : ''
-      text += `- [ ] ${priorityLabel} ${t.title}${due}\n`
+      text += `- 优先级:${p} ${t.title}${due}\n`
     }
   }
 

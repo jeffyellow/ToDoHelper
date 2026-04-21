@@ -122,6 +122,7 @@ export const useSettingStore = defineStore('setting', () => {
     isFloat,
     isLoggedIn,
     currentUser,
+    lastUserId,
     init,
     restoreSession,
     saveSession,
