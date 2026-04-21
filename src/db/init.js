@@ -46,6 +46,12 @@ export async function initDb() {
   }
   if (!colNames.includes('user_id')) {
     await database.execute('ALTER TABLE tasks ADD COLUMN user_id INTEGER')
+    // 给已有任务归属到之前登录的账号
+    const authRows = await database.select("SELECT value FROM app_settings WHERE key = 'auth_user_id'")
+    const existingUserId = authRows[0]?.value ?? null
+    if (existingUserId) {
+      await database.execute('UPDATE tasks SET user_id = ? WHERE user_id IS NULL', [existingUserId])
+    }
   }
 
   const tasksWithoutUuid = await database.select('SELECT id FROM tasks WHERE local_uuid IS NULL')
