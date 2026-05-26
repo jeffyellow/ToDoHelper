@@ -9,7 +9,8 @@ import { useSettingStore } from './settingStore.js'
 export const useTaskStore = defineStore('task', () => {
   const settingStore = useSettingStore()
   const tasks = ref([])
-  const filterTag = ref('')
+  const tagOptions = ['工作', '生活', '学习', '其他']
+  const selectedTags = ref([])
   const searchQuery = ref('')
   const activeFilter = ref('active') // 'active' | 'pending' | 'completed'
   const syncStatus = ref('idle') // 'idle' | 'syncing' | 'error' | 'offline'
@@ -24,6 +25,17 @@ export const useTaskStore = defineStore('task', () => {
     tasks.value.filter((t) => t.completed)
   )
 
+  function normalizeTag(tag) {
+    if (!tag) return ''
+    return tagOptions.includes(tag) ? tag : '其他'
+  }
+
+  function applyTagFilter(list) {
+    if (!selectedTags.value.length) return list
+    const set = new Set(selectedTags.value)
+    return list.filter((t) => set.has(normalizeTag(t.tag)))
+  }
+
   const filteredTasks = computed(() => {
     let result = tasks.value
     if (activeFilter.value === 'active') {
@@ -33,9 +45,7 @@ export const useTaskStore = defineStore('task', () => {
     } else if (activeFilter.value === 'completed') {
       result = result.filter((t) => t.completed)
     }
-    if (filterTag.value) {
-      result = result.filter((t) => t.tag === filterTag.value)
-    }
+    result = applyTagFilter(result)
     if (searchQuery.value.trim()) {
       const q = searchQuery.value.toLowerCase()
       result = result.filter((t) => t.title.toLowerCase().includes(q))
@@ -44,7 +54,7 @@ export const useTaskStore = defineStore('task', () => {
   })
 
   const floatTasks = computed(() => {
-    return tasks.value
+    return applyTagFilter(tasks.value)
       .filter((t) => !t.completed)
       .sort((a, b) => {
         if (b.priority !== a.priority) return b.priority - a.priority
@@ -53,7 +63,7 @@ export const useTaskStore = defineStore('task', () => {
   })
 
   const allTags = computed(() => {
-    const set = new Set(tasks.value.map((t) => t.tag).filter(Boolean))
+    const set = new Set(tasks.value.map((t) => normalizeTag(t.tag)).filter(Boolean))
     return Array.from(set)
   })
 
@@ -133,7 +143,24 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   function setFilterTag(tag) {
-    filterTag.value = tag
+    selectedTags.value = tag ? [tag] : []
+  }
+
+  function setSelectedTags(tags) {
+    selectedTags.value = tags.filter((tag) => tagOptions.includes(tag))
+  }
+
+  function toggleSelectedTag(tag) {
+    if (!tagOptions.includes(tag)) return
+    if (selectedTags.value.includes(tag)) {
+      selectedTags.value = selectedTags.value.filter((t) => t !== tag)
+      return
+    }
+    selectedTags.value = [...selectedTags.value, tag]
+  }
+
+  function clearSelectedTags() {
+    selectedTags.value = []
   }
 
   function setSearchQuery(q) {
@@ -146,7 +173,8 @@ export const useTaskStore = defineStore('task', () => {
 
   return {
     tasks,
-    filterTag,
+    tagOptions,
+    selectedTags,
     searchQuery,
     activeFilter,
     syncStatus,
@@ -162,6 +190,10 @@ export const useTaskStore = defineStore('task', () => {
     toggleComplete,
     removeTask,
     setFilterTag,
+    setSelectedTags,
+    toggleSelectedTag,
+    clearSelectedTags,
+    normalizeTag,
     setSearchQuery,
     setActiveFilter,
     assignAnonymousTasks,

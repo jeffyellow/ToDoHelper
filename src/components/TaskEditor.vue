@@ -19,7 +19,7 @@ watch(() => props.task, (t) => {
     startDate.value = t.start_date || ''
     dueDate.value = t.due_date || ''
     priority.value = t.priority
-    tag.value = t.tag || ''
+    tag.value = taskStore.tagOptions.includes(t.tag) ? t.tag : (t.tag ? '其他' : '')
   } else {
     title.value = ''
     startDate.value = ''
@@ -82,7 +82,16 @@ function onBackdrop(e) {
         </label>
         <label>
           标签
-          <input v-model="tag" type="text" placeholder="例如：工作" />
+          <select v-model="tag">
+            <option value="">不设置</option>
+            <option
+              v-for="option in taskStore.tagOptions"
+              :key="option"
+              :value="option"
+            >
+              {{ option }}
+            </option>
+          </select>
         </label>
       </div>
       <div class="modal-actions">
